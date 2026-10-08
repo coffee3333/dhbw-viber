@@ -1,3 +1,4 @@
+import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -26,6 +27,7 @@ from app.models.schemas import (
     LectureMaterialCreate,
     LectureNotesUpdate,
     LectureStatusUpdate,
+    SubjectCreateSchema,
     SubjectDetailSchema,
     SubjectSchema,
     SubjectUpdateSchema,
@@ -176,7 +178,42 @@ def list_subjects(db: Session = Depends(get_db)):
     return results
 
 
-@router.put("/subjects/{subject_id}", response_model=SubjectSchema, dependencies=[Depends(require_admin)])
+@router.post("/subjects", response_model=SubjectSchema, dependencies=[Depends(require_auth)])
+def create_subject(
+    payload: SubjectCreateSchema,
+    db: Session = Depends(get_db)
+):
+    """Create a new academic subject/module."""
+    if not payload.name or not payload.name.strip():
+        raise HTTPException(status_code=400, detail="Subject name cannot be empty")
+
+    clean_name = payload.name.strip()
+    norm_name = re.sub(r'[^a-zA-Z0-9]+', '_', clean_name.lower()).strip('_')[:30]
+    subject_id = f"subj_{norm_name}_{uuid.uuid4().hex[:6]}"
+
+    subject = SubjectDB(
+        id=subject_id,
+        name=clean_name,
+        code=payload.code.strip() if payload.code else None,
+        lecturer=payload.lecturer.strip() if payload.lecturer else None,
+        color=payload.color or "#4f46e5",
+        semester=payload.semester.strip() if payload.semester else None,
+    )
+    db.add(subject)
+    db.commit()
+    db.refresh(subject)
+    return SubjectSchema(
+        id=subject.id,
+        name=subject.name,
+        code=subject.code,
+        lecturer=subject.lecturer,
+        color=subject.color or "#4f46e5",
+        semester=subject.semester,
+        lectures_count=0
+    )
+
+
+@router.put("/subjects/{subject_id}", response_model=SubjectSchema, dependencies=[Depends(require_auth)])
 def update_subject(
     subject_id: str,
     payload: SubjectUpdateSchema,
@@ -186,14 +223,16 @@ def update_subject(
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
 
-    if payload.name is not None:
-        subject.name = payload.name
+    if payload.name is not None and payload.name.strip():
+        subject.name = payload.name.strip()
     if payload.code is not None:
-        subject.code = payload.code
+        subject.code = payload.code.strip() if payload.code else None
     if payload.lecturer is not None:
-        subject.lecturer = payload.lecturer
+        subject.lecturer = payload.lecturer.strip() if payload.lecturer else None
     if payload.color is not None:
         subject.color = payload.color
+    if payload.semester is not None:
+        subject.semester = payload.semester.strip() if payload.semester else None
 
     db.commit()
     db.refresh(subject)
@@ -208,8 +247,8 @@ def update_subject(
     )
 
 
-@router.post("/cleanup-holidays", dependencies=[Depends(require_admin)])
-@router.post("/subjects/cleanup-holidays", dependencies=[Depends(require_admin)])
+@router.post("/cleanup-holidays", dependencies=[Depends(require_auth)])
+@router.post("/subjects/cleanup-holidays", dependencies=[Depends(require_auth)])
 def cleanup_holidays(db: Session = Depends(get_db)):
     """Automatically identify and remove public holidays and non-academic calendar entries."""
     holiday_keywords = [
@@ -401,7 +440,7 @@ def get_subject_detail(subject_id: str, db: Session = Depends(get_db)):
     )
 
 
-@router.delete("/subjects/{subject_id}", dependencies=[Depends(require_admin)])
+@router.delete("/subjects/{subject_id}", dependencies=[Depends(require_auth)])
 def delete_subject(subject_id: str, db: Session = Depends(get_db)):
     """Delete a subject and all associated non-academic or unwanted lecture entries."""
     subject = db.query(SubjectDB).filter(SubjectDB.id == subject_id).first()

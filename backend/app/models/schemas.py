@@ -92,11 +92,20 @@ class SubjectSchema(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class SubjectCreateSchema(BaseModel):
+    name: str
+    code: str | None = None
+    lecturer: str | None = None
+    color: str | None = "#4f46e5"
+    semester: str | None = None
+
+
 class SubjectUpdateSchema(BaseModel):
     name: str | None = None
     code: str | None = None
     lecturer: str | None = None
     color: str | None = None
+    semester: str | None = None
 
 
 class LectureSchema(BaseModel):

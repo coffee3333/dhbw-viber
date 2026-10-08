@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { useCalendarStore } from "../stores/useCalendarStore";
 import { useMeetingStore } from "../stores/useMeetingStore";
 import { calendarApi } from "../api/calendarApi";
-import type { Lecture, SubjectDetail } from "../types/calendar";
+import type { Lecture, SubjectDetail, CreateSubjectPayload, UpdateSubjectPayload } from "../types/calendar";
 
 
 export function useCalendarViewModel() {
@@ -277,6 +277,40 @@ export function useCalendarViewModel() {
     }
   };
 
+  const createSubject = async (payload: CreateSubjectPayload) => {
+    try {
+      setLoading(true);
+      const res = await calendarApi.createSubject(payload);
+      await fetchCalendarData();
+      return res;
+    } catch (err: any) {
+      throw new Error(err.message || "Failed to create subject.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateSubject = async (subjectId: string, payload: UpdateSubjectPayload) => {
+    try {
+      setLoading(true);
+      const res = await calendarApi.updateSubject(subjectId, payload);
+      if (selectedSubjectId === subjectId) {
+        try {
+          const detail = await calendarApi.getSubjectDetail(subjectId);
+          setSelectedSubjectDetail(detail);
+        } catch {
+          // Ignore
+        }
+      }
+      await fetchCalendarData();
+      return res;
+    } catch (err: any) {
+      throw new Error(err.message || "Failed to update subject.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const deleteSubject = async (subjectId: string) => {
     try {
       setLoading(true);
@@ -405,6 +439,8 @@ export function useCalendarViewModel() {
     deleteSource,
     refreshAllSources,
     clearAllTimetable,
+    createSubject,
+    updateSubject,
     deleteSubject,
     cleanupHolidays,
     toggleSubjectFilter,

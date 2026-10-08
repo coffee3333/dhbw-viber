@@ -7,6 +7,8 @@ import type {
   SyncResponse,
   SubjectDetail,
   LectureDetail,
+  CreateSubjectPayload,
+  UpdateSubjectPayload,
 } from "../types/calendar";
 
 export const calendarApi = {
@@ -142,6 +144,16 @@ export const calendarApi = {
 
   async refreshAll(): Promise<{ message: string }> {
     const res = await apiClient.post<{ message: string }>("/calendar/refresh-all");
+    return res.data;
+  },
+
+  async createSubject(payload: CreateSubjectPayload): Promise<Subject> {
+    const res = await apiClient.post<Subject>("/calendar/subjects", payload);
+    return res.data;
+  },
+
+  async updateSubject(subjectId: string, payload: UpdateSubjectPayload): Promise<Subject> {
+    const res = await apiClient.put<Subject>(`/calendar/subjects/${subjectId}`, payload);
     return res.data;
   },
 

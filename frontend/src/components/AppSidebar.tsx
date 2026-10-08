@@ -11,10 +11,17 @@ import {
   Check,
   ListTodo,
   CalendarDays,
+  Plus,
+  Pencil,
+  Trash2,
+  Sparkles,
 } from "lucide-react";
 import { useAppStore } from "../stores/useAppStore";
 import { useAuthViewModel } from "../viewmodels/useAuthViewModel";
-import type { Subject, Lecture } from "../types/calendar";
+import { useCalendarViewModel } from "../viewmodels/useCalendarViewModel";
+import { SubjectModal } from "./SubjectModal";
+import { showToast } from "../utils/toast";
+import type { Subject, Lecture, CreateSubjectPayload, UpdateSubjectPayload } from "../types/calendar";
 
 interface AppSidebarProps {
   activePage: "home" | "account";
@@ -58,8 +65,64 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   } = useAppStore();
   const { currentUser } = useAuthViewModel();
   const isAdmin = currentUser?.role === "admin";
+  const { createSubject, updateSubject, deleteSubject, cleanupHolidays } = useCalendarViewModel();
   const [isAppSwitcherOpen, setIsAppSwitcherOpen] = useState(false);
+  const [isSubjectModalOpen, setIsSubjectModalOpen] = useState(false);
+  const [subjectToEdit, setSubjectToEdit] = useState<Subject | null>(null);
+  const [isCleaningHolidays, setIsCleaningHolidays] = useState(false);
   const switcherRef = useRef<HTMLDivElement>(null);
+
+  const handleOpenCreateSubject = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSubjectToEdit(null);
+    setIsSubjectModalOpen(true);
+  };
+
+  const handleOpenEditSubject = (sub: Subject, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSubjectToEdit(sub);
+    setIsSubjectModalOpen(true);
+  };
+
+  const handleDeleteSubjectDirect = async (sub: Subject, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(`Are you sure you want to delete subject "${sub.name}" and all its scheduled lecture entries?`)) return;
+    try {
+      await deleteSubject(sub.id);
+      showToast.success("Subject Deleted", `"${sub.name}" was removed.`);
+    } catch (err: any) {
+      showToast.error("Failed to delete subject", err.message);
+    }
+  };
+
+  const handleSaveSubject = async (payload: CreateSubjectPayload | UpdateSubjectPayload) => {
+    if (subjectToEdit) {
+      await updateSubject(subjectToEdit.id, payload as UpdateSubjectPayload);
+      showToast.success("Subject Updated", `"${payload.name || subjectToEdit.name}" saved.`);
+    } else {
+      await createSubject(payload as CreateSubjectPayload);
+      showToast.success("Subject Created", `"${payload.name}" added successfully.`);
+    }
+  };
+
+  const handleDeleteSubjectFromModal = async (subjectId: string) => {
+    await deleteSubject(subjectId);
+    showToast.success("Subject Deleted", "Subject and its lectures removed.");
+  };
+
+  const handleCleanupHolidays = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm("Clean up public holidays and non-academic calendar entries (e.g. Christmas, Tag der Deutschen Einheit, etc.)?")) return;
+    try {
+      setIsCleaningHolidays(true);
+      const res = await cleanupHolidays();
+      showToast.success("Holidays Cleaned Up", res.message || `Removed ${res.deleted_count} non-academic entries.`);
+    } catch (err: any) {
+      showToast.error("Failed to cleanup holidays", err.message);
+    } finally {
+      setIsCleaningHolidays(false);
+    }
+  };
 
   // Close app switcher dropdown on click outside
   useEffect(() => {
@@ -255,45 +318,106 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             {!isCollapsed ? (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between px-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                  <span>Subjects & Modules</span>
-                  <span className="bg-slate-800 text-slate-400 px-1.5 py-0.2 rounded-full font-mono">
-                    {subjects.length}
-                  </span>
+                  <div className="flex items-center space-x-1.5">
+                    <span>Subjects & Modules</span>
+                    <span className="bg-slate-800 text-slate-400 px-1.5 py-0.2 rounded-full font-mono">
+                      {subjects.length}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <button
+                      type="button"
+                      onClick={handleCleanupHolidays}
+                      disabled={isCleaningHolidays}
+                      title="Clean up public holidays and non-academic entries"
+                      className="p-1 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-slate-800/80 transition cursor-pointer disabled:opacity-50"
+                    >
+                      <Sparkles className={`w-3.5 h-3.5 ${isCleaningHolidays ? "animate-spin text-amber-400" : ""}`} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleOpenCreateSubject}
+                      title="Add New Subject"
+                      className="p-1 rounded-lg text-slate-400 hover:text-indigo-300 hover:bg-slate-800/80 transition cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-1 pt-1">
                   {subjects.map((sub) => {
                     const isSelected = selectedSubjectId === sub.id;
                     return (
-                      <button
-                        key={sub.id}
-                        onClick={() => onSelectSubject(isSelected ? null : sub.id)}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition cursor-pointer text-left ${
-                          isSelected
-                            ? "bg-slate-800/90 text-white font-semibold border border-indigo-500/40 shadow-sm"
-                            : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent"
-                        }`}
-                      >
-                        <div className="flex items-center space-x-2.5 min-w-0 pr-2">
-                          <span
-                            className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                            style={{ backgroundColor: sub.color || "#6366f1" }}
-                          />
-                          <span className="truncate">{sub.name}</span>
-                        </div>
-                        <span className="text-[10px] text-slate-500 font-mono flex-shrink-0">
-                          {sub.lectures_count ?? 0}
-                        </span>
-                      </button>
+                      <div key={sub.id} className="relative group">
+                        <button
+                          onClick={() => onSelectSubject(isSelected ? null : sub.id)}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition cursor-pointer text-left ${
+                            isSelected
+                              ? "bg-slate-800/90 text-white font-semibold border border-indigo-500/40 shadow-sm"
+                              : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent"
+                          }`}
+                        >
+                          <div className="flex items-center space-x-2.5 min-w-0 pr-2">
+                            <span
+                              className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: sub.color || "#6366f1" }}
+                            />
+                            <span className="truncate">{sub.name}</span>
+                          </div>
+                          <div className="flex items-center space-x-1 flex-shrink-0">
+                            <span className="text-[10px] text-slate-500 font-mono group-hover:hidden">
+                              {sub.lectures_count ?? 0}
+                            </span>
+                            <div className="hidden group-hover:flex items-center space-x-0.5">
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                onClick={(e) => handleOpenEditSubject(sub, e)}
+                                title="Edit Subject"
+                                className="p-1 rounded-md text-slate-400 hover:text-indigo-300 hover:bg-slate-700/60 transition cursor-pointer"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </span>
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                onClick={(e) => handleDeleteSubjectDirect(sub, e)}
+                                title="Delete Subject"
+                                className="p-1 rounded-md text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </span>
+                            </div>
+                          </div>
+                        </button>
+                      </div>
                     );
                   })}
                   {subjects.length === 0 && (
-                    <div className="p-3 text-center text-xs text-slate-500">No subjects loaded.</div>
+                    <div className="p-3 text-center text-xs text-slate-500">
+                      <span>No subjects loaded.</span>
+                      <button
+                        type="button"
+                        onClick={handleOpenCreateSubject}
+                        className="block mt-1.5 mx-auto text-indigo-400 hover:underline font-semibold cursor-pointer"
+                      >
+                        + Create Subject
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
             ) : (
               <div className="space-y-2 flex flex-col items-center">
+                <button
+                  type="button"
+                  onClick={handleOpenCreateSubject}
+                  className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-indigo-300 hover:bg-slate-800/60 transition cursor-pointer"
+                  title="Add New Subject"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
                 {subjects.map((sub) => (
                   <button
                     key={sub.id}
@@ -419,6 +543,15 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           )}
         </button>
       </div>
+
+      {/* Subject Create / Edit Modal */}
+      <SubjectModal
+        isOpen={isSubjectModalOpen}
+        onClose={() => setIsSubjectModalOpen(false)}
+        subjectToEdit={subjectToEdit}
+        onSave={handleSaveSubject}
+        onDelete={handleDeleteSubjectFromModal}
+      />
     </aside>
   );
 };

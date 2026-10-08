@@ -8,6 +8,22 @@ export interface Subject {
   lectures_count: number;
 }
 
+export interface CreateSubjectPayload {
+  name: string;
+  code?: string | null;
+  lecturer?: string | null;
+  color?: string;
+  semester?: string | null;
+}
+
+export interface UpdateSubjectPayload {
+  name?: string;
+  code?: string | null;
+  lecturer?: string | null;
+  color?: string;
+  semester?: string | null;
+}
+
 export interface Lecture {
   id: string;
   title: string;
