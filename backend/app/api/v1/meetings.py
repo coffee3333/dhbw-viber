@@ -8,6 +8,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Request,
     Response,
     UploadFile,
 )
@@ -15,11 +16,13 @@ from sqlalchemy.orm import Session
 
 from app.agents.meeting_orchestrator import MeetingOrchestrator
 from app.agents.summarizer_agent import SummarizerAgent
+from app.core.ai_credentials import resolve_user_ai_config
 from app.core.config import RECORDINGS_DIR, get_settings
 from app.core.database import get_db
 from app.core.logger import get_logger
-from app.core.security import require_admin
+from app.core.security import get_current_user_optional, require_admin
 from app.models.db import ActionItemDB, LectureDB, MeetingDB
+from app.models.user import UserDB
 from app.models.schemas import (
     ActionItemSchema,
     MeetingListItemSchema,
@@ -139,6 +142,7 @@ def delete_meeting(meeting_id: str, db: Session = Depends(get_db)):
 
 @router.post("/upload", dependencies=[Depends(require_admin)])
 def upload_meeting(
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     title: str | None = Form(None),
@@ -177,8 +181,12 @@ def upload_meeting(
             if not template or template == "standard":
                 final_template = "moodle_lecture"  # Default academic lecture template
 
+    current_user: UserDB | None = get_current_user_optional(request, db)
+    user_id = current_user.id if current_user else None
+
     meeting = MeetingDB(
         id=f"mtg_{uuid.uuid4().hex[:10]}",
+        user_id=user_id,
         lecture_id=lecture_id if lecture_id and lecture_id.strip() else None,
         title=final_title or (file.filename or "Uploaded Lecture"),
         platform=platform or "upload",
@@ -192,7 +200,7 @@ def upload_meeting(
     db.commit()
     db.refresh(meeting)
 
-    orchestrator = MeetingOrchestrator(meeting.id)
+    orchestrator = MeetingOrchestrator(meeting.id, user_id=user_id)
     background_tasks.add_task(orchestrator.run, final_template)
 
     return {"meeting_id": meeting.id, "status": "processing"}
@@ -201,6 +209,7 @@ def upload_meeting(
 @router.post("/record", dependencies=[Depends(require_admin)])
 @router.post("/record-blob", dependencies=[Depends(require_admin)])
 def record_meeting(
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile | None = File(None),
     audio: UploadFile | None = File(None),
@@ -232,8 +241,12 @@ def record_meeting(
             if not template or template == "standard":
                 final_template = "moodle_lecture"
 
+    current_user: UserDB | None = get_current_user_optional(request, db)
+    user_id = current_user.id if current_user else None
+
     meeting = MeetingDB(
         id=f"mtg_{uuid.uuid4().hex[:10]}",
+        user_id=user_id,
         lecture_id=lecture_id if lecture_id and lecture_id.strip() else None,
         title=final_title or "Recorded Lecture",
         platform=platform or "recording",
@@ -247,7 +260,7 @@ def record_meeting(
     db.commit()
     db.refresh(meeting)
 
-    orchestrator = MeetingOrchestrator(meeting.id)
+    orchestrator = MeetingOrchestrator(meeting.id, user_id=user_id)
     background_tasks.add_task(orchestrator.run, final_template)
 
     return {"meeting_id": meeting.id, "status": "processing"}
@@ -256,6 +269,7 @@ def record_meeting(
 @router.post("/{meeting_id}/process", dependencies=[Depends(require_admin)])
 def process_meeting(
     meeting_id: str,
+    request: Request,
     background_tasks: BackgroundTasks,
     template: str | None = "standard",
     db: Session = Depends(get_db)
@@ -264,7 +278,9 @@ def process_meeting(
     if not m:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
-    orchestrator = MeetingOrchestrator(meeting_id)
+    current_user: UserDB | None = get_current_user_optional(request, db)
+    user_id = current_user.id if current_user else getattr(m, "user_id", None)
+    orchestrator = MeetingOrchestrator(meeting_id, user_id=user_id)
     background_tasks.add_task(orchestrator.run, template)
     return {"message": "Processing restarted", "status": "processing"}
 
@@ -273,6 +289,7 @@ def process_meeting(
 def resummarize_meeting(
     meeting_id: str,
     payload: dict,
+    request: Request,
     db: Session = Depends(get_db)
 ):
     m = db.query(MeetingDB).filter(MeetingDB.id == meeting_id).first()
@@ -281,14 +298,19 @@ def resummarize_meeting(
     if not m.full_text:
         raise HTTPException(status_code=400, detail="Meeting has no transcript to summarize")
 
-    settings = get_settings()
+    current_user: UserDB | None = get_current_user_optional(request, db)
+    if not current_user and getattr(m, "user_id", None):
+        current_user = db.query(UserDB).filter(UserDB.id == m.user_id).first()
+
+    ai_config = resolve_user_ai_config(current_user)
     template = payload.get("template", "standard")
     custom = payload.get("custom_instructions")
 
-    key = settings.gemini_api_key if settings.summarization_engine == "gemini" else settings.openai_api_key
-    model = settings.gemini_model if settings.summarization_engine == "gemini" else settings.openai_model
-
-    agent = SummarizerAgent(engine=settings.summarization_engine, api_key=key, model=model)
+    agent = SummarizerAgent(
+        engine=ai_config.summarization_engine,
+        api_key=ai_config.summarization_api_key,
+        model=ai_config.summarization_model
+    )
     summary = agent.analyze(m.full_text, template=template, custom_instructions=custom)
 
     m.overview = summary.overview

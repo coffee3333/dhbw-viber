@@ -52,7 +52,11 @@ class UserCredentialsDB(Base):
     git_author_email = Column(String(255), nullable=True)
     jira_account_id = Column(String(128), nullable=True, index=True)
     gemini_api_key_encrypted = Column(Text, nullable=True)
-    gemini_model = Column(String(50), nullable=True, default="gemini-2.5-flash")
+    gemini_model = Column(String(50), nullable=True, default="gemini-flash-latest")
+    openai_api_key_encrypted = Column(Text, nullable=True)
+    openai_model = Column(String(50), nullable=True, default="gpt-4o")
+    transcription_engine = Column(String(30), nullable=True, default="gemini")
+    summarization_engine = Column(String(30), nullable=True, default="gemini")
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     user = relationship("UserDB", back_populates="credentials")

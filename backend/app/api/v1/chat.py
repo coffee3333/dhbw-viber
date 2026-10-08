@@ -1,11 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.agents.chat_agent import ChatAgent
-from app.core.config import get_settings
+from app.core.ai_credentials import resolve_user_ai_config
 from app.core.database import get_db
+from app.core.security import get_current_user_optional
 from app.models.db import MeetingDB
 from app.models.schemas import ChatRequestSchema, ChatResponseSchema
+from app.models.user import UserDB
 
 router = APIRouter(prefix="/meetings", tags=["chat"])
 
@@ -13,6 +15,7 @@ router = APIRouter(prefix="/meetings", tags=["chat"])
 def chat_with_meeting(
     meeting_id: str,
     payload: ChatRequestSchema,
+    request: Request,
     db: Session = Depends(get_db)
 ):
     m = db.query(MeetingDB).filter(MeetingDB.id == meeting_id).first()
@@ -21,10 +24,16 @@ def chat_with_meeting(
     if not m.full_text:
         raise HTTPException(status_code=400, detail="Meeting transcript is empty")
 
-    settings = get_settings()
-    key = settings.gemini_api_key if settings.summarization_engine == "gemini" else settings.openai_api_key
-    model = settings.gemini_model if settings.summarization_engine == "gemini" else settings.openai_model
+    current_user: UserDB | None = get_current_user_optional(request, db)
+    if not current_user and getattr(m, "user_id", None):
+        current_user = db.query(UserDB).filter(UserDB.id == m.user_id).first()
 
-    agent = ChatAgent(engine=settings.summarization_engine, api_key=key, model=model)
+    ai_config = resolve_user_ai_config(current_user)
+
+    agent = ChatAgent(
+        engine=ai_config.summarization_engine,
+        api_key=ai_config.summarization_api_key,
+        model=ai_config.summarization_model
+    )
     answer = agent.ask(transcript=m.full_text, question=payload.question)
     return ChatResponseSchema(answer=answer)

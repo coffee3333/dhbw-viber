@@ -38,7 +38,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   isCollapsed,
   onToggleCollapse,
   onNavigateHome,
-  onNavigateAccount,
+  onNavigateAccount: _onNavigateAccount,
   onOpenRecorder,
   subjects,
   selectedSubjectId,
@@ -354,14 +354,10 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         {/* User Profile Bar */}
         <div className="flex items-center space-x-1">
           <button
-            onClick={activeApp === "study_hub" ? onNavigateAccount : onOpenCredentialsModal}
+            onClick={onOpenCredentialsModal}
             className={`flex-1 flex items-center rounded-xl transition text-xs font-semibold cursor-pointer ${
               isCollapsed ? "justify-center p-2.5" : "px-3 py-2 space-x-2.5"
-            } ${
-              activePage === "account" && activeApp === "study_hub"
-                ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40 font-bold"
-                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent"
-            }`}
+            } text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent`}
             title={currentUser ? `${currentUser.display_name} (${currentUser.role})` : "Account & Settings"}
           >
             <div className="w-5 h-5 rounded-md bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300 flex-shrink-0">

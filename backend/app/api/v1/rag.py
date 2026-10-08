@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.core.ai_credentials import resolve_user_ai_config
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.core.security import get_current_user_optional
 from app.models.db import LectureDB, LectureKnowledgeChunkDB, SubjectDB
+from app.models.user import UserDB
 from app.services.rag_service import GrillAgent, RagService
 
 router = APIRouter(prefix="/rag", tags=["rag"])
@@ -34,9 +37,14 @@ class SearchRequest(BaseModel):
 
 
 @router.post("/grill-me")
-def grill_me(req: GrillMeRequest, db: Session = Depends(get_db)):
+def grill_me(
+    req: GrillMeRequest,
+    request: Request,
+    db: Session = Depends(get_db)
+):
     """Generate a rigorous exam/quiz question grounded in lecture notes & AI summaries."""
-    settings = get_settings()
+    current_user: UserDB | None = get_current_user_optional(request, db)
+    ai_config = resolve_user_ai_config(current_user)
 
     subject_name = "Computer Science"
     lecture_title = None
@@ -59,9 +67,9 @@ def grill_me(req: GrillMeRequest, db: Session = Depends(get_db)):
         query=req.topic_focus
     )
 
-    engine = settings.summarization_engine
-    api_key = settings.gemini_api_key if engine == "gemini" else settings.openai_api_key
-    model = settings.gemini_model if engine == "gemini" else settings.openai_model
+    engine = ai_config.summarization_engine
+    api_key = ai_config.summarization_api_key
+    model = ai_config.summarization_model
     effective_thread_id = req.thread_id or f"grill_{req.subject_id or 'general'}_{req.lecture_id or 'all'}"
 
     if not api_key:
@@ -94,9 +102,14 @@ def grill_me(req: GrillMeRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/evaluate")
-def evaluate_student_answer(req: EvaluateRequest, db: Session = Depends(get_db)):
+def evaluate_student_answer(
+    req: EvaluateRequest,
+    request: Request,
+    db: Session = Depends(get_db)
+):
     """Grade and critique the student's answer against the lecture knowledge."""
-    settings = get_settings()
+    current_user: UserDB | None = get_current_user_optional(request, db)
+    ai_config = resolve_user_ai_config(current_user)
 
     subject_name = "Computer Science"
     if req.lecture_id:
@@ -115,9 +128,9 @@ def evaluate_student_answer(req: EvaluateRequest, db: Session = Depends(get_db))
         query=req.question
     )
 
-    engine = settings.summarization_engine
-    api_key = settings.gemini_api_key if engine == "gemini" else settings.openai_api_key
-    model = settings.gemini_model if engine == "gemini" else settings.openai_model
+    engine = ai_config.summarization_engine
+    api_key = ai_config.summarization_api_key
+    model = ai_config.summarization_model
     effective_thread_id = req.thread_id or f"grill_{req.subject_id or 'general'}_{req.lecture_id or 'all'}"
 
     if not api_key:

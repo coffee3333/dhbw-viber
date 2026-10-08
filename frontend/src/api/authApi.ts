@@ -6,6 +6,7 @@ import type {
   LoginResponse,
   UserProfile,
   UserProfileWithCredentials,
+  UserProfileUpdateRequest,
   UserCredentialsUpdateRequest,
 } from "../types/auth";
 
@@ -33,6 +34,13 @@ export const authApi = {
 
   async getMe(): Promise<UserProfileWithCredentials> {
     const res = await apiClient.get<UserProfileWithCredentials>("/auth/me");
+    return res.data;
+  },
+
+  async updateProfile(
+    payload: UserProfileUpdateRequest
+  ): Promise<{ success: boolean; message: string; user?: any }> {
+    const res = await apiClient.patch("/auth/profile", payload);
     return res.data;
   },
 

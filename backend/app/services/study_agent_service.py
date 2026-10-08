@@ -43,24 +43,25 @@ class StudyAgentService:
     """
 
     @staticmethod
-    def get_llm(token_saver: bool = False):
-        settings = get_settings()
+    def get_llm(token_saver: bool = False, user: Any | None = None):
+        from app.core.ai_credentials import resolve_user_ai_config
+        ai_config = resolve_user_ai_config(user)
         max_tokens = 600 if token_saver else None
-        if settings.summarization_engine == "gemini":
+        if ai_config.summarization_engine == "gemini":
             from langchain_google_genai import ChatGoogleGenerativeAI
             kwargs: dict[str, Any] = {
-                "model": settings.gemini_model or "gemini-flash-latest",
-                "google_api_key": settings.gemini_api_key,
+                "model": ai_config.summarization_model or "gemini-flash-latest",
+                "google_api_key": ai_config.summarization_api_key,
                 "temperature": 0.2,
             }
             if max_tokens:
                 kwargs["max_output_tokens"] = max_tokens
             return ChatGoogleGenerativeAI(**kwargs)
-        elif settings.summarization_engine == "openai":
+        elif ai_config.summarization_engine == "openai":
             from langchain_openai import ChatOpenAI
             kwargs = {
-                "model": settings.openai_model or "gpt-4o",
-                "api_key": settings.openai_api_key,
+                "model": ai_config.summarization_model or "gpt-4o",
+                "api_key": ai_config.summarization_api_key,
                 "temperature": 0.2,
             }
             if max_tokens:
@@ -70,7 +71,7 @@ class StudyAgentService:
             from langchain_google_genai import ChatGoogleGenerativeAI
             kwargs = {
                 "model": "gemini-flash-latest",
-                "google_api_key": settings.gemini_api_key,
+                "google_api_key": ai_config.summarization_api_key,
                 "temperature": 0.2,
             }
             if max_tokens:
@@ -86,6 +87,7 @@ class StudyAgentService:
         subject_id: str | None,
         tracker: dict[str, Any],
         token_saver: bool = False,
+        user: Any | None = None,
     ) -> list[Any]:
         """Creates specialized LangChain tools bound to DB session and execution context."""
 
@@ -184,10 +186,13 @@ class StudyAgentService:
                 lecture_id=effective_lecture_id if scope == "lecture" else None,
                 query=topic_focus
             )
-            settings = get_settings()
-            key = settings.gemini_api_key if settings.summarization_engine == "gemini" else settings.openai_api_key
-            model = settings.gemini_model if settings.summarization_engine == "gemini" else settings.openai_model
-            agent = GrillAgent(engine=settings.summarization_engine, api_key=key, model=model)
+            from app.core.ai_credentials import resolve_user_ai_config
+            ai_config = resolve_user_ai_config(user)
+            agent = GrillAgent(
+                engine=ai_config.summarization_engine,
+                api_key=ai_config.summarization_api_key,
+                model=ai_config.summarization_model
+            )
             question_data = agent.generate_question(
                 context=context,
                 subject_name=subject_name,
@@ -223,10 +228,13 @@ class StudyAgentService:
                 lecture_id=effective_lecture_id if scope == "lecture" else None,
                 query=question
             )
-            settings = get_settings()
-            key = settings.gemini_api_key if settings.summarization_engine == "gemini" else settings.openai_api_key
-            model = settings.gemini_model if settings.summarization_engine == "gemini" else settings.openai_model
-            agent = GrillAgent(engine=settings.summarization_engine, api_key=key, model=model)
+            from app.core.ai_credentials import resolve_user_ai_config
+            ai_config = resolve_user_ai_config(user)
+            agent = GrillAgent(
+                engine=ai_config.summarization_engine,
+                api_key=ai_config.summarization_api_key,
+                model=ai_config.summarization_model
+            )
             res = agent.evaluate_answer(
                 context=context,
                 question=question,
@@ -433,6 +441,7 @@ COMMUNICATION STYLE:
         subject_id: str | None = None,
         thread_id: str | None = None,
         token_saver: bool = False,
+        user: Any | None = None,
     ) -> dict[str, Any]:
         """
         Executes a LangGraph conversational turn with dynamic tools and context.
@@ -468,9 +477,10 @@ COMMUNICATION STYLE:
             subject_id=subject_id,
             tracker=tracker,
             token_saver=token_saver,
+            user=user,
         )
 
-        llm = cls.get_llm(token_saver=token_saver)
+        llm = cls.get_llm(token_saver=token_saver, user=user)
         llm_with_tools = llm.bind_tools(tools)
 
         def call_model(state: MessagesState):

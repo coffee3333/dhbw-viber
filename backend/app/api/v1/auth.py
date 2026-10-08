@@ -35,6 +35,13 @@ class AuthStatusResponse(BaseModel):
     user: dict[str, Any] | None = None
 
 
+class UserProfileUpdateRequest(BaseModel):
+    display_name: str | None = None
+    email: str | None = None
+    telegram_username: str | None = None
+    telegram_chat_id: str | None = None
+
+
 class UserCredentialsUpdateRequest(BaseModel):
     github_token: str | None = None
     git_author_name: str | None = None
@@ -42,6 +49,10 @@ class UserCredentialsUpdateRequest(BaseModel):
     jira_account_id: str | None = None
     gemini_api_key: str | None = None
     gemini_model: str | None = None
+    openai_api_key: str | None = None
+    openai_model: str | None = None
+    transcription_engine: str | None = None
+    summarization_engine: str | None = None
 
 
 class AdminCreateUserRequest(BaseModel):
@@ -191,6 +202,7 @@ def get_my_profile(current_user: UserDB = Depends(get_current_user)):
     creds = current_user.credentials
     raw_github = decrypt_secret(creds.github_token_encrypted) if creds else None
     raw_gemini = decrypt_secret(creds.gemini_api_key_encrypted) if creds else None
+    raw_openai = decrypt_secret(creds.openai_api_key_encrypted) if creds else None
 
     return {
         "id": current_user.id,
@@ -208,9 +220,50 @@ def get_my_profile(current_user: UserDB = Depends(get_current_user)):
             "jira_account_id": creds.jira_account_id if creds else None,
             "gemini_api_key_masked": mask_secret(raw_gemini) if raw_gemini else None,
             "has_gemini_api_key": bool(raw_gemini),
-            "gemini_model": creds.gemini_model if creds else "gemini-2.5-flash",
+            "gemini_model": (creds.gemini_model if creds and creds.gemini_model else "gemini-flash-latest"),
+            "openai_api_key_masked": mask_secret(raw_openai) if raw_openai else None,
+            "has_openai_api_key": bool(raw_openai),
+            "openai_model": (creds.openai_model if creds and creds.openai_model else "gpt-4o"),
+            "transcription_engine": (creds.transcription_engine if creds and creds.transcription_engine else "gemini"),
+            "summarization_engine": (creds.summarization_engine if creds and creds.summarization_engine else "gemini"),
         }
     }
+
+
+@router.patch("/profile")
+def update_my_profile(
+    payload: UserProfileUpdateRequest,
+    current_user: UserDB = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Allows authenticated user to update their display name, email, and Telegram settings."""
+    if payload.display_name is not None:
+        name_clean = payload.display_name.strip()
+        if name_clean:
+            current_user.display_name = name_clean
+
+    if payload.email is not None:
+        email_clean = payload.email.strip().lower()
+        if email_clean and email_clean != (current_user.email or "").lower():
+            # Check unique email
+            existing = db.query(UserDB).filter(UserDB.email == email_clean, UserDB.id != current_user.id).first()
+            if existing:
+                raise HTTPException(status_code=400, detail="This email is already in use by another user.")
+            current_user.email = email_clean
+        elif not email_clean:
+            current_user.email = None
+
+    if payload.telegram_username is not None:
+        clean_tg = payload.telegram_username.strip().lstrip("@")
+        current_user.telegram_username = clean_tg or None
+
+    if payload.telegram_chat_id is not None:
+        clean_chat_id = payload.telegram_chat_id.strip()
+        current_user.telegram_chat_id = clean_chat_id or None
+
+    db.commit()
+    db.refresh(current_user)
+    return {"success": True, "message": "Profile updated successfully."}
 
 
 @router.patch("/credentials")
@@ -219,7 +272,7 @@ def update_my_credentials(
     current_user: UserDB = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Allows authenticated user to update their personal GitHub token, Git author, Jira ID, and Gemini API key."""
+    """Allows authenticated user to update their personal GitHub token, Git author, Jira ID, and AI BYOK keys."""
     creds = current_user.credentials
     if not creds:
         creds = UserCredentialsDB(user_id=current_user.id)
@@ -243,7 +296,20 @@ def update_my_credentials(
         creds.gemini_api_key_encrypted = encrypt_secret(gemini_clean) if gemini_clean else None
 
     if payload.gemini_model is not None:
-        creds.gemini_model = payload.gemini_model.strip() or "gemini-2.5-flash"
+        creds.gemini_model = payload.gemini_model.strip() or "gemini-flash-latest"
+
+    if payload.openai_api_key is not None:
+        openai_clean = payload.openai_api_key.strip()
+        creds.openai_api_key_encrypted = encrypt_secret(openai_clean) if openai_clean else None
+
+    if payload.openai_model is not None:
+        creds.openai_model = payload.openai_model.strip() or "gpt-4o"
+
+    if payload.transcription_engine is not None:
+        creds.transcription_engine = payload.transcription_engine.strip() or "gemini"
+
+    if payload.summarization_engine is not None:
+        creds.summarization_engine = payload.summarization_engine.strip() or "gemini"
 
     db.commit()
     return {"success": True, "message": "Personal credentials updated successfully."}

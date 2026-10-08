@@ -5,6 +5,7 @@ export interface UserProfile {
   display_name: string;
   role: "admin" | "member";
   telegram_username?: string | null;
+  telegram_chat_id?: string | null;
   telegram_connected?: boolean;
 }
 
@@ -17,6 +18,11 @@ export interface UserCredentials {
   gemini_api_key_masked?: string | null;
   has_gemini_api_key?: boolean;
   gemini_model?: string | null;
+  openai_api_key_masked?: string | null;
+  has_openai_api_key?: boolean;
+  openai_model?: string | null;
+  transcription_engine?: string | null;
+  summarization_engine?: string | null;
 }
 
 export interface UserProfileWithCredentials extends UserProfile {
@@ -42,6 +48,13 @@ export interface LoginResponse {
   message: string;
 }
 
+export interface UserProfileUpdateRequest {
+  display_name?: string;
+  email?: string;
+  telegram_username?: string;
+  telegram_chat_id?: string;
+}
+
 export interface UserCredentialsUpdateRequest {
   github_token?: string;
   git_author_name?: string;
@@ -49,6 +62,10 @@ export interface UserCredentialsUpdateRequest {
   jira_account_id?: string;
   gemini_api_key?: string;
   gemini_model?: string;
+  openai_api_key?: string;
+  openai_model?: string;
+  transcription_engine?: string;
+  summarization_engine?: string;
 }
 
 export interface AdminCreateUserRequest {

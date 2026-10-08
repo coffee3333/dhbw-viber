@@ -39,17 +39,46 @@ def init_db() -> None:
 
     import app.models.db  # noqa: F401 - load models
 
-    # If running against PostgreSQL, enable pgvector extension first and check username column
+    # If running against PostgreSQL, enable pgvector extension first and check columns
     if settings.database_url.startswith("postgresql"):
         try:
             with engine.connect() as conn:
                 conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
                 conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(100) UNIQUE;"))
                 conn.execute(text("ALTER TABLE users ALTER COLUMN email DROP NOT NULL;"))
+                conn.execute(text("ALTER TABLE user_credentials ADD COLUMN IF NOT EXISTS openai_api_key_encrypted TEXT;"))
+                conn.execute(text("ALTER TABLE user_credentials ADD COLUMN IF NOT EXISTS openai_model VARCHAR(50) DEFAULT 'gpt-4o';"))
+                conn.execute(text("ALTER TABLE user_credentials ADD COLUMN IF NOT EXISTS transcription_engine VARCHAR(30) DEFAULT 'gemini';"))
+                conn.execute(text("ALTER TABLE user_credentials ADD COLUMN IF NOT EXISTS summarization_engine VARCHAR(30) DEFAULT 'gemini';"))
+                conn.execute(text("ALTER TABLE meetings ADD COLUMN IF NOT EXISTS user_id VARCHAR(64);"))
                 conn.commit()
                 logger.info("PostgreSQL extensions and schema verified successfully.")
         except Exception as e:
             logger.warning(f"pgvector / schema check note: {e}")
+    elif settings.database_url.startswith("sqlite"):
+        try:
+            with engine.connect() as conn:
+                # Check user_credentials columns
+                table_check = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='user_credentials';")).fetchone()
+                if table_check:
+                    cols = [r[1] for r in conn.execute(text("PRAGMA table_info(user_credentials);")).fetchall()]
+                    if "openai_api_key_encrypted" not in cols:
+                        conn.execute(text("ALTER TABLE user_credentials ADD COLUMN openai_api_key_encrypted TEXT;"))
+                    if "openai_model" not in cols:
+                        conn.execute(text("ALTER TABLE user_credentials ADD COLUMN openai_model VARCHAR(50) DEFAULT 'gpt-4o';"))
+                    if "transcription_engine" not in cols:
+                        conn.execute(text("ALTER TABLE user_credentials ADD COLUMN transcription_engine VARCHAR(30) DEFAULT 'gemini';"))
+                    if "summarization_engine" not in cols:
+                        conn.execute(text("ALTER TABLE user_credentials ADD COLUMN summarization_engine VARCHAR(30) DEFAULT 'gemini';"))
+                # Check meetings columns
+                m_check = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='meetings';")).fetchone()
+                if m_check:
+                    m_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(meetings);")).fetchall()]
+                    if "user_id" not in m_cols:
+                        conn.execute(text("ALTER TABLE meetings ADD COLUMN user_id VARCHAR(64);"))
+                conn.commit()
+        except Exception as e:
+            logger.warning(f"SQLite migration check note: {e}")
 
     Base.metadata.create_all(bind=engine)
     logger.info("SQLAlchemy database tables schema verified.")

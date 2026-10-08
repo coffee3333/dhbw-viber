@@ -1,19 +1,30 @@
 import React, { useState, useEffect } from "react";
 import {
   X,
-  Key,
   Shield,
+  User,
   UserPlus,
   Save,
-  CheckCircle2,
   Users,
   Trash2,
   Eye,
   EyeOff,
   Bot,
   FolderSync,
+  Code2,
+  Cloud,
+  Calendar,
+  RefreshCw,
+  LogOut,
+  ExternalLink,
+  Sparkles,
+  Send,
+  Check,
+  Upload,
 } from "lucide-react";
 import { useAuthViewModel } from "../viewmodels/useAuthViewModel";
+import { useAccountViewModel } from "../viewmodels/useAccountViewModel";
+import { useCalendarViewModel } from "../viewmodels/useCalendarViewModel";
 import { authApi } from "../api/authApi";
 import { showToast } from "../utils/toast";
 import type { UserProfile } from "../types/auth";
@@ -21,7 +32,15 @@ import type { AutomationProject } from "../types/jiraAutomation";
 import { JiraProjectSettings } from "../pages/jiraPage/JiraProjectSettings";
 import { JiraAgentGuideView } from "../pages/jiraPage/JiraAgentGuideModal";
 
-export type UserCredentialsModalTab = "project" | "agent_guide" | "credentials" | "admin_users";
+export type UserCredentialsModalTab =
+  | "profile"
+  | "ai_models"
+  | "developer_tools"
+  | "google_workspace"
+  | "project"
+  | "agent_guide"
+  | "admin_users"
+  | "credentials";
 
 export interface UserCredentialsModalProps {
   isOpen: boolean;
@@ -38,21 +57,76 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
   project,
   onRefreshProject,
 }) => {
-  const { currentUser, credentials, updateCredentials, adminCreateUser, adminDeleteUser } =
-    useAuthViewModel();
+  const {
+    currentUser,
+    credentials,
+    updateProfile,
+    updateCredentials,
+    adminCreateUser,
+    adminDeleteUser,
+    logout,
+  } = useAuthViewModel();
 
-  const [activeTab, setActiveTab] = useState<UserCredentialsModalTab>(
-    initialTab || (project ? "project" : "credentials")
-  );
+  const {
+    googleStatus,
+    connectGoogle,
+    disconnectGoogle,
+    syncGoogleTasks,
+    pullGoogleTasks,
+  } = useAccountViewModel();
 
-  // Credentials form state
-  const [jiraAccountId, setJiraAccountId] = useState("");
+  const {
+    sources,
+    syncUrl,
+    uploadIcs,
+    deleteSource,
+    refreshAllSources,
+  } = useCalendarViewModel();
+
+  // Normalize initialTab
+  const normalizeTab = (tab?: UserCredentialsModalTab): UserCredentialsModalTab => {
+    if (!tab) return project ? "project" : "profile";
+    if (tab === "credentials") return "ai_models";
+    return tab;
+  };
+
+  const [activeTab, setActiveTab] = useState<UserCredentialsModalTab>(normalizeTab(initialTab));
+
+  // Profile Form State
+  const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState("");
+  const [telegramUsername, setTelegramUsername] = useState("");
+  const [telegramChatId, setTelegramChatId] = useState("");
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  // AI BYOK Form State
+  const [summarizationEngine, setSummarizationEngine] = useState<"gemini" | "openai">("gemini");
+  const [transcriptionEngine, setTranscriptionEngine] = useState<"gemini" | "openai" | "local_whisper">("gemini");
   const [geminiApiKey, setGeminiApiKey] = useState("");
   const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [geminiModel, setGeminiModel] = useState("gemini-flash-latest");
-  const [isSavingCreds, setIsSavingCreds] = useState(false);
+  const [openaiApiKey, setOpenaiApiKey] = useState("");
+  const [showOpenaiKey, setShowOpenaiKey] = useState(false);
+  const [openaiModel, setOpenaiModel] = useState("gpt-4o");
+  const [isSavingAI, setIsSavingAI] = useState(false);
 
-  // Admin user creation state
+  // Developer Tools State
+  const [jiraAccountId, setJiraAccountId] = useState("");
+  const [githubToken, setGithubToken] = useState("");
+  const [showGithubToken, setShowGithubToken] = useState(false);
+  const [gitAuthorName, setGitAuthorName] = useState("");
+  const [gitAuthorEmail, setGitAuthorEmail] = useState("");
+  const [isSavingDev, setIsSavingDev] = useState(false);
+
+  // Google & Timetable State
+  const [isSyncingTasks, setIsSyncingTasks] = useState(false);
+  const [isPullingTasks, setIsPullingTasks] = useState(false);
+  const [calUrlInput, setCalUrlInput] = useState("");
+  const [calNameInput, setCalNameInput] = useState("");
+  const [isSyncingCal, setIsSyncingCal] = useState(false);
+  const [isUploadingIcs, setIsUploadingIcs] = useState(false);
+
+  // Admin User Registration State
   const [userList, setUserList] = useState<UserProfile[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [newUsername, setNewUsername] = useState("");
@@ -63,19 +137,39 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
 
   useEffect(() => {
     if (initialTab) {
-      setActiveTab(initialTab);
+      setActiveTab(normalizeTab(initialTab));
     } else if (project) {
       setActiveTab("project");
     } else {
-      setActiveTab("credentials");
+      setActiveTab("profile");
     }
   }, [initialTab, isOpen, project?.id]);
 
   useEffect(() => {
+    if (currentUser) {
+      setDisplayName(currentUser.display_name || "");
+      setEmail(currentUser.email || "");
+      setTelegramUsername(currentUser.telegram_username || "");
+      setTelegramChatId(currentUser.telegram_chat_id || "");
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
     if (credentials) {
       setJiraAccountId(credentials.jira_account_id || "");
+      setGitAuthorName(credentials.git_author_name || "");
+      setGitAuthorEmail(credentials.git_author_email || "");
       if (credentials.gemini_model) {
         setGeminiModel(credentials.gemini_model);
+      }
+      if (credentials.openai_model) {
+        setOpenaiModel(credentials.openai_model);
+      }
+      if (credentials.transcription_engine) {
+        setTranscriptionEngine(credentials.transcription_engine as any);
+      }
+      if (credentials.summarization_engine) {
+        setSummarizationEngine(credentials.summarization_engine as any);
       }
     }
   }, [credentials]);
@@ -101,43 +195,166 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSaveCredentials = async (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      setIsSavingCreds(true);
+      setIsSavingProfile(true);
+      await updateProfile({
+        display_name: displayName.trim() || undefined,
+        email: email.trim() || undefined,
+        telegram_username: telegramUsername.trim() || undefined,
+        telegram_chat_id: telegramChatId.trim() || undefined,
+      });
+      showToast.success("Profile Updated", "Your profile details have been saved.");
+    } catch (err: any) {
+      showToast.error("Failed to save profile", err.response?.data?.detail || err.message);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleSaveAIConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setIsSavingAI(true);
       await updateCredentials({
-        jira_account_id: jiraAccountId.trim() || undefined,
         gemini_api_key: geminiApiKey.trim() || undefined,
         gemini_model: geminiModel,
+        openai_api_key: openaiApiKey.trim() || undefined,
+        openai_model: openaiModel,
+        transcription_engine: transcriptionEngine,
+        summarization_engine: summarizationEngine,
       });
-      showToast.success("Settings Saved", "Your credentials have been updated successfully.");
+      showToast.success("AI Configuration Saved", "Your BYOK preferences have been updated.");
       setGeminiApiKey("");
+      setOpenaiApiKey("");
     } catch (err: any) {
-      showToast.error("Failed to save credentials", err.message);
+      showToast.error("Failed to save AI config", err.response?.data?.detail || err.message);
     } finally {
-      setIsSavingCreds(false);
+      setIsSavingAI(false);
     }
   };
 
   const handleClearGeminiKey = async () => {
     try {
-      setIsSavingCreds(true);
-      await updateCredentials({
-        gemini_api_key: "",
-      });
+      setIsSavingAI(true);
+      await updateCredentials({ gemini_api_key: "" });
       showToast.success("Gemini Token Cleared", "Reset to system default key.");
       setGeminiApiKey("");
     } catch (err: any) {
       showToast.error("Failed to clear key", err.message);
     } finally {
-      setIsSavingCreds(false);
+      setIsSavingAI(false);
+    }
+  };
+
+  const handleClearOpenaiKey = async () => {
+    try {
+      setIsSavingAI(true);
+      await updateCredentials({ openai_api_key: "" });
+      showToast.success("OpenAI Key Cleared", "Reset to system default key.");
+      setOpenaiApiKey("");
+    } catch (err: any) {
+      showToast.error("Failed to clear key", err.message);
+    } finally {
+      setIsSavingAI(false);
+    }
+  };
+
+  const handleSaveDevCredentials = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setIsSavingDev(true);
+      await updateCredentials({
+        jira_account_id: jiraAccountId.trim() || undefined,
+        github_token: githubToken.trim() || undefined,
+        git_author_name: gitAuthorName.trim() || undefined,
+        git_author_email: gitAuthorEmail.trim() || undefined,
+      });
+      showToast.success("Developer Credentials Saved", "Git and Jira mappings updated.");
+      setGithubToken("");
+    } catch (err: any) {
+      showToast.error("Failed to save credentials", err.response?.data?.detail || err.message);
+    } finally {
+      setIsSavingDev(false);
+    }
+  };
+
+  const handleClearGithubToken = async () => {
+    try {
+      setIsSavingDev(true);
+      await updateCredentials({ github_token: "" });
+      showToast.success("GitHub Token Removed", "Token cleared successfully.");
+      setGithubToken("");
+    } catch (err: any) {
+      showToast.error("Failed to clear token", err.message);
+    } finally {
+      setIsSavingDev(false);
+    }
+  };
+
+  const handleSyncTasksNow = async () => {
+    try {
+      setIsSyncingTasks(true);
+      await syncGoogleTasks();
+    } finally {
+      setIsSyncingTasks(false);
+    }
+  };
+
+  const handlePullTasksNow = async () => {
+    try {
+      setIsPullingTasks(true);
+      await pullGoogleTasks();
+    } finally {
+      setIsPullingTasks(false);
+    }
+  };
+
+  const handleSyncUrl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!calUrlInput.trim()) return;
+    try {
+      setIsSyncingCal(true);
+      const res = await syncUrl(calUrlInput.trim(), calNameInput.trim() || undefined);
+      showToast.success("Calendar Feed Synced", res.message);
+      setCalUrlInput("");
+      setCalNameInput("");
+    } catch (err: any) {
+      showToast.error("Sync Failed", err.message);
+    } finally {
+      setIsSyncingCal(false);
+    }
+  };
+
+  const handleFileIcsUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setIsUploadingIcs(true);
+      const res = await uploadIcs(file);
+      showToast.success("ICS Imported", res.message);
+    } catch (err: any) {
+      showToast.error("Upload Failed", err.message);
+    } finally {
+      setIsUploadingIcs(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleDeleteSource = async (id: number) => {
+    if (!confirm("Are you sure you want to remove this timetable source?")) return;
+    try {
+      await deleteSource(id);
+      showToast.success("Source Removed", "Timetable source removed successfully.");
+    } catch (err: any) {
+      showToast.error("Failed to delete", err.message);
     }
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUsername.trim() || !newUserPassword.trim()) return;
-
     try {
       setIsCreatingUser(true);
       await adminCreateUser({
@@ -146,14 +363,13 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
         password: newUserPassword.trim(),
         role: newUserRole,
       });
-      showToast.success("Member Registered", `Account for @${newUsername} has been created.`);
+      showToast.success("Member Registered", `Account @${newUsername} has been created.`);
       setNewUsername("");
       setNewDisplayName("");
       setNewUserPassword("");
       await loadUsers();
     } catch (err: any) {
-      const msg = err.response?.data?.detail || err.message;
-      showToast.error("Registration Failed", msg);
+      showToast.error("Registration Failed", err.response?.data?.detail || err.message);
     } finally {
       setIsCreatingUser(false);
     }
@@ -180,12 +396,12 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/60 flex-shrink-0">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-cyan-500 flex items-center justify-center text-white shadow-md shadow-indigo-600/20">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 flex items-center justify-center text-white shadow-md shadow-indigo-600/20">
               <Shield className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-base font-bold text-white flex items-center space-x-2">
-                <span>{project ? "Settings & Integrations Hub" : "Identity & Credentials Manager"}</span>
+                <span>Account & Credentials Hub</span>
                 {project && (
                   <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-950/80 border border-indigo-500/40 text-indigo-300 font-normal">
                     {project.name}
@@ -208,6 +424,63 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
 
         {/* Tab switcher */}
         <div className="px-6 pt-3 border-b border-slate-800 flex space-x-2 bg-slate-900/30 text-xs overflow-x-auto flex-shrink-0">
+          {/* Tab 1: Profile */}
+          <button
+            type="button"
+            onClick={() => setActiveTab("profile")}
+            className={`pb-2.5 px-3 font-semibold transition border-b-2 cursor-pointer flex items-center space-x-1.5 whitespace-nowrap ${
+              activeTab === "profile"
+                ? "border-indigo-500 text-indigo-400"
+                : "border-transparent text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <User className="w-3.5 h-3.5" />
+            <span>Profile & Alerts</span>
+          </button>
+
+          {/* Tab 2: AI & Models BYOK */}
+          <button
+            type="button"
+            onClick={() => setActiveTab("ai_models")}
+            className={`pb-2.5 px-3 font-semibold transition border-b-2 cursor-pointer flex items-center space-x-1.5 whitespace-nowrap ${
+              activeTab === "ai_models"
+                ? "border-indigo-500 text-indigo-400"
+                : "border-transparent text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span>AI Models & BYOK</span>
+          </button>
+
+          {/* Tab 3: Git & Developer Tools */}
+          <button
+            type="button"
+            onClick={() => setActiveTab("developer_tools")}
+            className={`pb-2.5 px-3 font-semibold transition border-b-2 cursor-pointer flex items-center space-x-1.5 whitespace-nowrap ${
+              activeTab === "developer_tools"
+                ? "border-indigo-500 text-indigo-400"
+                : "border-transparent text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Code2 className="w-3.5 h-3.5" />
+            <span>Git & Jira Tools</span>
+          </button>
+
+          {/* Tab 4: Google Workspace & Sync */}
+          <button
+            type="button"
+            onClick={() => setActiveTab("google_workspace")}
+            className={`pb-2.5 px-3 font-semibold transition border-b-2 cursor-pointer flex items-center space-x-1.5 whitespace-nowrap ${
+              activeTab === "google_workspace"
+                ? "border-indigo-500 text-indigo-400"
+                : "border-transparent text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Cloud className="w-3.5 h-3.5" />
+            <span>Google & Timetable</span>
+          </button>
+
+          {/* Project Specific Tabs */}
           {project && (
             <>
               <button
@@ -233,24 +506,12 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
                 }`}
               >
                 <Bot className="w-3.5 h-3.5" />
-                <span>Agent Integration</span>
+                <span>Agent Guide</span>
               </button>
             </>
           )}
 
-          <button
-            type="button"
-            onClick={() => setActiveTab("credentials")}
-            className={`pb-2.5 px-3 font-semibold transition border-b-2 cursor-pointer flex items-center space-x-1.5 whitespace-nowrap ${
-              activeTab === "credentials"
-                ? "border-indigo-500 text-indigo-400"
-                : "border-transparent text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <Key className="w-3.5 h-3.5" />
-            <span>My Identity & AI</span>
-          </button>
-
+          {/* Admin User Management */}
           {currentUser?.role === "admin" && (
             <button
               type="button"
@@ -262,97 +523,237 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
               }`}
             >
               <Users className="w-3.5 h-3.5" />
-              <span>Team Registration (Admin Only)</span>
+              <span>Team & Admin</span>
             </button>
           )}
         </div>
 
-        {/* Body Content */}
-        <div className="overflow-y-auto flex-1 flex flex-col">
-          {activeTab === "project" && project && (
-            <div className="p-6">
-              <JiraProjectSettings
-                project={project}
-                onRefreshProject={onRefreshProject || (() => {})}
-              />
-            </div>
-          )}
-
-          {activeTab === "agent_guide" && (
-            <JiraAgentGuideView
-              projectId={project?.id}
-              projectName={project?.name}
-            />
-          )}
-
-          {activeTab === "credentials" && (
-            <div className="p-6 space-y-6">
-              <form onSubmit={handleSaveCredentials} className="space-y-4">
-                <div className="bg-indigo-950/30 border border-indigo-500/20 p-3.5 rounded-xl text-xs text-indigo-200 flex items-start space-x-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-indigo-400 flex-shrink-0 mt-0.5" />
-                  <span>
-                    Map your DHBW StudyHub user to your <strong>Atlassian / Jira Account ID</strong>.
-                    When automated sprint tasks are assigned to you, they will automatically be assigned to you in Jira Cloud.
-                  </span>
+        {/* Tab Body */}
+        <div className="overflow-y-auto flex-1 flex flex-col p-6">
+          {/* TAB 1: Profile & Telegram Alerts */}
+          {activeTab === "profile" && (
+            <div className="space-y-6 max-w-2xl">
+              <form onSubmit={handleSaveProfile} className="space-y-4">
+                <div className="flex items-center space-x-4 p-4 rounded-2xl bg-slate-900/80 border border-slate-800">
+                  <div className="w-14 h-14 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-300 font-bold text-lg">
+                    {currentUser?.display_name ? currentUser.display_name.slice(0, 2).toUpperCase() : "ME"}
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center space-x-2">
+                      <span>{currentUser?.display_name || currentUser?.username}</span>
+                      <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300">
+                        {currentUser?.role}
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-400">@{currentUser?.username}</p>
+                  </div>
                 </div>
 
-                {/* Jira Account ID */}
-                <div className="space-y-1.5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-300">Display Name</label>
+                    <input
+                      type="text"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      placeholder="Your Full Name"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-300">Email Address</label>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="user@dhbw.de"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Telegram Notifications Section */}
+                <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-slate-300">Jira Account ID (Atlassian ID)</label>
-                    {credentials?.jira_account_id && (
-                      <span className="text-[11px] text-emerald-400 bg-emerald-950/50 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                        Configured
+                    <div className="flex items-center space-x-2">
+                      <Send className="w-4 h-4 text-cyan-400" />
+                      <h4 className="text-xs font-bold text-white">Telegram Alerts & Summaries</h4>
+                    </div>
+                    {currentUser?.telegram_connected ? (
+                      <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center space-x-1">
+                        <Check className="w-3 h-3" />
+                        <span>Connected</span>
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-full">
+                        Not Linked
                       </span>
                     )}
                   </div>
-                  <input
-                    type="text"
-                    value={jiraAccountId}
-                    onChange={(e) => setJiraAccountId(e.target.value)}
-                    placeholder="e.g. 712020:e8b0a19f-784e-4a24-be77-4c602fd11c73"
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-indigo-500 font-mono"
-                  />
-                  <p className="text-[11px] text-slate-500">
-                    You can find your Account ID in your Jira Profile URL or via the <strong>Discover Users</strong> button in the Team tab.
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Receive instant lecture summary digests, action item reminders, and automated sprint notifications in Telegram.
+                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-400">Telegram Username</label>
+                      <input
+                        type="text"
+                        value={telegramUsername}
+                        onChange={(e) => setTelegramUsername(e.target.value)}
+                        placeholder="@username"
+                        className="w-full px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-400">Telegram Chat ID</label>
+                      <input
+                        type="text"
+                        value={telegramChatId}
+                        onChange={(e) => setTelegramChatId(e.target.value)}
+                        placeholder="e.g. 123456789"
+                        className="w-full px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-cyan-500 font-mono"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-500">
+                    💡 Tip: Start <code>@userinfobot</code> in Telegram to find your unique numerical Chat ID.
                   </p>
                 </div>
 
-                {/* Gemini API Key */}
-                <div className="space-y-1.5 pt-2 border-t border-slate-800">
+                <div className="flex justify-between items-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      logout();
+                      onClose();
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 font-semibold text-xs flex items-center space-x-1.5 transition cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Log Out</span>
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={isSavingProfile}
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md shadow-indigo-600/30 transition cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{isSavingProfile ? "Saving..." : "Save Profile"}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* TAB 2: AI Models & BYOK */}
+          {activeTab === "ai_models" && (
+            <div className="space-y-6 max-w-3xl">
+              {/* BYOK Info Banner */}
+              <div className="bg-gradient-to-r from-indigo-950/50 via-slate-900 to-indigo-950/30 border border-indigo-500/30 p-4 rounded-2xl text-xs space-y-2">
+                <div className="flex items-center space-x-2 text-indigo-300 font-bold">
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <span>Bring Your Own Key (BYOK) Architecture</span>
+                </div>
+                <p className="text-slate-300 text-[11px] leading-relaxed">
+                  Both <strong>Meeting Agent</strong> (transcription, lecture summaries, study chat) and{" "}
+                  <strong>Jira Automation</strong> (sprint planning, issue drafting) execute using your personal API keys when provided.
+                  Your keys are encrypted in PostgreSQL using Fernet AES-256 and never logged or exposed.
+                </p>
+              </div>
+
+              <form onSubmit={handleSaveAIConfig} className="space-y-6">
+                {/* Engine Selector */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2 p-3.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                    <label className="text-xs font-semibold text-slate-200 block">
+                      AI Summarization & Study Engine
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSummarizationEngine("gemini")}
+                        className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1.5 border transition cursor-pointer ${
+                          summarizationEngine === "gemini"
+                            ? "bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-600/30"
+                            : "bg-slate-800 border-slate-700 text-slate-300 hover:text-white"
+                        }`}
+                      >
+                        <Bot className="w-3.5 h-3.5" />
+                        <span>Google Gemini</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSummarizationEngine("openai")}
+                        className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1.5 border transition cursor-pointer ${
+                          summarizationEngine === "openai"
+                            ? "bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-600/30"
+                            : "bg-slate-800 border-slate-700 text-slate-300 hover:text-white"
+                        }`}
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>OpenAI</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 p-3.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                    <label className="text-xs font-semibold text-slate-200 block">
+                      Audio Transcription Engine
+                    </label>
+                    <select
+                      value={transcriptionEngine}
+                      onChange={(e) => setTranscriptionEngine(e.target.value as any)}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-indigo-500 cursor-pointer"
+                    >
+                      <option value="gemini">Google Gemini 2.5 (Fast & Free Tier Recommended)</option>
+                      <option value="openai">OpenAI Whisper (Cloud)</option>
+                      <option value="local_whisper">Local Whisper (No API Key Required)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Google Gemini Card */}
+                <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-1.5">
-                      <Bot className="w-3.5 h-3.5 text-indigo-400" />
-                      <label className="text-xs font-semibold text-slate-300">Google Gemini API Token</label>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-cyan-500 to-indigo-500 flex items-center justify-center text-white">
+                        <Bot className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-white">Google Gemini API Key</h4>
+                        <p className="text-[10px] text-slate-400">Powers MeetingAgent and Jira Sprint Planner</p>
+                      </div>
                     </div>
                     {credentials?.has_gemini_api_key ? (
                       <div className="flex items-center space-x-2">
-                        <span className="text-[11px] text-emerald-400 bg-emerald-950/50 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                          Custom Key
+                        <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                          Personal Key Active
                         </span>
                         <button
                           type="button"
                           onClick={handleClearGeminiKey}
-                          disabled={isSavingCreds}
+                          disabled={isSavingAI}
                           className="text-[10px] text-red-400 hover:text-red-300 underline cursor-pointer"
-                          title="Remove custom key and use system default key"
                         >
-                          Reset to Default
+                          Reset
                         </button>
                       </div>
                     ) : (
-                      <span className="text-[11px] text-slate-400 bg-slate-900 border border-slate-700 px-2 py-0.5 rounded-full">
-                        System Key Active
+                      <span className="text-[10px] text-slate-400 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-full">
+                        Using System Default Key
                       </span>
                     )}
                   </div>
+
                   <div className="relative">
                     <input
                       type={showGeminiKey ? "text" : "password"}
                       value={geminiApiKey}
                       onChange={(e) => setGeminiApiKey(e.target.value)}
                       placeholder={credentials?.has_gemini_api_key ? (credentials.gemini_api_key_masked || "••••••••••••••••") : "AIzaSy..."}
-                      className="w-full pl-3 pr-10 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-indigo-500 font-mono"
+                      className="w-full pl-3 pr-10 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-indigo-500 font-mono"
                     />
                     <button
                       type="button"
@@ -362,41 +763,399 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
                       {showGeminiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                     </button>
                   </div>
-                  <p className="text-[11px] text-slate-500">
-                    Required to use the AI Sprint Planner agent. Your token is encrypted and never shared.
-                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-400 block mb-1">Gemini Model</label>
+                      <select
+                        value={geminiModel}
+                        onChange={(e) => setGeminiModel(e.target.value)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-indigo-500 cursor-pointer"
+                      >
+                        <option value="gemini-flash-latest">Gemini Flash (Recommended - Fast & Free)</option>
+                        <option value="gemini-pro-latest">Gemini Pro</option>
+                        <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Gemini Model */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-300">Gemini Model</label>
-                  <select
-                    value={geminiModel}
-                    onChange={(e) => setGeminiModel(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-indigo-500 cursor-pointer"
-                  >
-                    <option value="gemini-flash-latest">Gemini Flash (Recommended - Fast and Cost-Effective)</option>
-                    <option value="gemini-pro-latest">Gemini Pro</option>
-                    <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
-                  </select>
+                {/* OpenAI Card */}
+                <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-emerald-500 to-teal-500 flex items-center justify-center text-white">
+                        <Sparkles className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-white">OpenAI API Key</h4>
+                        <p className="text-[10px] text-slate-400">For GPT-4o summarization and Whisper audio</p>
+                      </div>
+                    </div>
+                    {credentials?.has_openai_api_key ? (
+                      <div className="flex items-center space-x-2">
+                        <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                          Personal Key Active
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleClearOpenaiKey}
+                          disabled={isSavingAI}
+                          className="text-[10px] text-red-400 hover:text-red-300 underline cursor-pointer"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-full">
+                        Using System Default Key
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      type={showOpenaiKey ? "text" : "password"}
+                      value={openaiApiKey}
+                      onChange={(e) => setOpenaiApiKey(e.target.value)}
+                      placeholder={credentials?.has_openai_api_key ? (credentials.openai_api_key_masked || "••••••••••••••••") : "sk-..."}
+                      className="w-full pl-3 pr-10 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-indigo-500 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowOpenaiKey(!showOpenaiKey)}
+                      className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-200 cursor-pointer"
+                    >
+                      {showOpenaiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-400 block mb-1">OpenAI Model</label>
+                      <select
+                        value={openaiModel}
+                        onChange={(e) => setOpenaiModel(e.target.value)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-indigo-500 cursor-pointer"
+                      >
+                        <option value="gpt-4o">GPT-4o (Omni Recommended)</option>
+                        <option value="gpt-4o-mini">GPT-4o Mini</option>
+                        <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                        <option value="o1-mini">o1 Mini</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="pt-2 flex justify-end">
+                <div className="flex justify-end pt-2">
                   <button
                     type="submit"
-                    disabled={isSavingCreds}
+                    disabled={isSavingAI}
                     className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md shadow-indigo-600/30 transition cursor-pointer"
                   >
                     <Save className="w-3.5 h-3.5" />
-                    <span>{isSavingCreds ? "Saving..." : "Save Identity"}</span>
+                    <span>{isSavingAI ? "Saving Preferences..." : "Save AI Preferences"}</span>
                   </button>
                 </div>
               </form>
             </div>
           )}
 
-          {activeTab === "admin_users" && (
-            <div className="p-6 space-y-6">
+          {/* TAB 3: Developer & Git Tools */}
+          {activeTab === "developer_tools" && (
+            <div className="space-y-6 max-w-3xl">
+              <form onSubmit={handleSaveDevCredentials} className="space-y-4">
+                {/* Jira Account Mapping */}
+                <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-slate-200">Jira Account ID (Atlassian ID)</label>
+                    {credentials?.jira_account_id ? (
+                      <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                        Configured
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-full">
+                        Not Set
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={jiraAccountId}
+                    onChange={(e) => setJiraAccountId(e.target.value)}
+                    placeholder="e.g. 712020:e8b0a19f-784e-4a24-be77-4c602fd11c73"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-indigo-500 font-mono"
+                  />
+                  <p className="text-[11px] text-slate-500">
+                    Maps your DHBW account to your Atlassian Jira Cloud user for automated sprint task assignment.
+                  </p>
+                </div>
+
+                {/* GitHub Personal Access Token */}
+                <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-slate-200">GitHub Personal Access Token (PAT)</label>
+                    {credentials?.has_github_token ? (
+                      <div className="flex items-center space-x-2">
+                        <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                          Configured
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleClearGithubToken}
+                          disabled={isSavingDev}
+                          className="text-[10px] text-red-400 hover:text-red-300 underline cursor-pointer"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-full">
+                        Not Set
+                      </span>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showGithubToken ? "text" : "password"}
+                      value={githubToken}
+                      onChange={(e) => setGithubToken(e.target.value)}
+                      placeholder={credentials?.has_github_token ? (credentials.github_token_masked || "••••••••••••••••") : "ghp_..."}
+                      className="w-full pl-3 pr-10 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-indigo-500 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowGithubToken(!showGithubToken)}
+                      className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-200 cursor-pointer"
+                    >
+                      {showGithubToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Required for automated code commits, feature branching, and pull request generation under your GitHub identity.
+                  </p>
+                </div>
+
+                {/* Git Author Name & Email */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-300">Git Author Name</label>
+                    <input
+                      type="text"
+                      value={gitAuthorName}
+                      onChange={(e) => setGitAuthorName(e.target.value)}
+                      placeholder="e.g. John Doe"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-300">Git Author Email</label>
+                    <input
+                      type="email"
+                      value={gitAuthorEmail}
+                      onChange={(e) => setGitAuthorEmail(e.target.value)}
+                      placeholder="e.g. john.doe@company.com"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="submit"
+                    disabled={isSavingDev}
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md shadow-indigo-600/30 transition cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{isSavingDev ? "Saving..." : "Save Developer Settings"}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* TAB 4: Google Workspace & Timetable Sync */}
+          {activeTab === "google_workspace" && (
+            <div className="space-y-6 max-w-3xl">
+              {/* Google Workspace Connection Card */}
+              <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                      <Cloud className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">Google Workspace Integration</h4>
+                      <p className="text-[11px] text-slate-400">
+                        {googleStatus?.connected
+                          ? `Connected as ${googleStatus.email || "Active User"}`
+                          : "Connect your Google account for calendar and tasks sync"}
+                      </p>
+                    </div>
+                  </div>
+                  {googleStatus?.connected ? (
+                    <button
+                      type="button"
+                      onClick={disconnectGoogle}
+                      className="px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 font-semibold text-xs transition cursor-pointer"
+                    >
+                      Disconnect
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={connectGoogle}
+                      className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md transition cursor-pointer"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Connect Google</span>
+                    </button>
+                  )}
+                </div>
+
+                {googleStatus?.connected && (
+                  <div className="pt-2 border-t border-slate-800 flex items-center space-x-3">
+                    <button
+                      type="button"
+                      onClick={handleSyncTasksNow}
+                      disabled={isSyncingTasks}
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isSyncingTasks ? "animate-spin" : ""}`} />
+                      <span>Sync Tasks Now</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handlePullTasksNow}
+                      disabled={isPullingTasks}
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isPullingTasks ? "animate-spin" : ""}`} />
+                      <span>Pull Google Tasks</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* DHBW Timetable / Rapla Sync Card */}
+              <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Calendar className="w-4 h-4 text-indigo-400" />
+                    <h4 className="text-xs font-bold text-white">DHBW Rapla Timetable & ICS Feeds</h4>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await refreshAllSources();
+                        showToast.success("All Sources Synced", "Timetable calendar updated.");
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium flex items-center space-x-1 cursor-pointer"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>Refresh Feeds</span>
+                    </button>
+
+                    <label className="px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-indigo-200 text-xs font-medium flex items-center space-x-1 cursor-pointer">
+                      <Upload className="w-3 h-3" />
+                      <span>{isUploadingIcs ? "Importing..." : "Upload .ics"}</span>
+                      <input
+                        type="file"
+                        accept=".ics"
+                        disabled={isUploadingIcs}
+                        onChange={handleFileIcsUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <form onSubmit={handleSyncUrl} className="space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="md:col-span-2">
+                      <label className="text-[11px] font-semibold text-slate-400 block mb-1">Rapla iCal / Webcal URL</label>
+                      <input
+                        type="url"
+                        value={calUrlInput}
+                        onChange={(e) => setCalUrlInput(e.target.value)}
+                        placeholder="https://rapla.dhbw.de/rapla?page=iCal&..."
+                        className="w-full px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-400 block mb-1">Calendar Name (Optional)</label>
+                      <input
+                        type="text"
+                        value={calNameInput}
+                        onChange={(e) => setCalNameInput(e.target.value)}
+                        placeholder="e.g. DHBW Semester 6"
+                        className="w-full px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={isSyncingCal || !calUrlInput.trim()}
+                      className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-xs flex items-center space-x-1.5 transition cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isSyncingCal ? "animate-spin" : ""}`} />
+                      <span>Sync Timetable URL</span>
+                    </button>
+                  </div>
+                </form>
+
+                {/* Active Sources List */}
+                {sources && sources.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-slate-800">
+                    <div className="text-[11px] font-semibold text-slate-400">Configured Calendar Sources</div>
+                    <div className="divide-y divide-slate-800 border border-slate-800 rounded-xl overflow-hidden bg-slate-900/50">
+                      {sources.map((src) => (
+                        <div key={src.id} className="p-2.5 flex items-center justify-between text-xs">
+                          <div>
+                            <div className="font-semibold text-slate-200">{src.name}</div>
+                            <div className="text-[10px] text-slate-400 truncate max-w-sm">{src.url || "Local File Import"}</div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSource(src.id)}
+                            className="p-1 rounded text-slate-500 hover:text-rose-400 transition cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: Project Settings */}
+          {activeTab === "project" && project && (
+            <div className="p-2">
+              <JiraProjectSettings
+                project={project}
+                onRefreshProject={onRefreshProject || (() => {})}
+              />
+            </div>
+          )}
+
+          {/* TAB 6: Jira Agent Guide */}
+          {activeTab === "agent_guide" && (
+            <JiraAgentGuideView
+              projectId={project?.id}
+              projectName={project?.name}
+            />
+          )}
+
+          {/* TAB 7: Admin User Management */}
+          {activeTab === "admin_users" && currentUser?.role === "admin" && (
+            <div className="space-y-6 max-w-3xl">
               {/* Add member form */}
               <form onSubmit={handleCreateUser} className="p-4 rounded-xl bg-slate-900/80 border border-slate-700/60 space-y-3">
                 <h3 className="text-xs font-bold text-white flex items-center space-x-1.5">

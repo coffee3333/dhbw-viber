@@ -156,6 +156,7 @@ class MeetingDB(Base):
     __tablename__ = "meetings"
 
     id = Column(String(64), primary_key=True, index=True)
+    user_id = Column(String(64), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     lecture_id = Column(String(64), ForeignKey("lectures.id", ondelete="SET NULL"), nullable=True, index=True)
     title = Column(String(255), default="Untitled Meeting")
     platform = Column(String(50), default="general")

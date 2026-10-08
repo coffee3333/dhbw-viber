@@ -16,17 +16,29 @@ logger = get_logger("meeting_agent.orchestrator")
 class MeetingOrchestrator:
     """Master orchestrator agent coordinating the entire meeting lifecycle."""
 
-    def __init__(self, meeting_id: str):
+    def __init__(self, meeting_id: str, user_id: str | None = None):
         self.meeting_id = meeting_id
+        self.user_id = user_id
         self.settings = get_settings()
 
     def run(self, template: str = "standard") -> None:
         """Execute full end-to-end pipeline with transactional DB updates and Google Auto-Sync."""
+        from app.core.ai_credentials import resolve_user_ai_config
+        from app.models.user import UserDB
+
         db: Session = SessionLocal()
         try:
             meeting: MeetingDB = db.query(MeetingDB).filter(MeetingDB.id == self.meeting_id).first()
             if not meeting or not meeting.audio_filename:
                 return
+
+            # Resolve user-specific BYOK AI credentials if available
+            target_user_id = self.user_id or getattr(meeting, "user_id", None)
+            user = None
+            if target_user_id:
+                user = db.query(UserDB).filter(UserDB.id == target_user_id).first()
+
+            ai_config = resolve_user_ai_config(user)
 
             audio_path = RECORDINGS_DIR / meeting.audio_filename
             if not audio_path.exists():
@@ -40,16 +52,12 @@ class MeetingOrchestrator:
             meeting.duration_seconds = get_audio_duration(audio_path)
             db.commit()
 
-            # Step 2: Speech-to-Text Transcription
-            transcription_key = (
-                self.settings.gemini_api_key if self.settings.transcription_engine == "gemini"
-                else self.settings.openai_api_key
-            )
+            # Step 2: Speech-to-Text Transcription (using BYOK engine and key)
             segments, full_text, detected_lang = transcribe_audio(
                 file_path=audio_path,
-                engine=self.settings.transcription_engine,
-                api_key=transcription_key,
-                gemini_model=self.settings.gemini_model,
+                engine=ai_config.transcription_engine,
+                api_key=ai_config.transcription_api_key,
+                gemini_model=ai_config.transcription_model if ai_config.transcription_engine == "gemini" else self.settings.gemini_model,
                 whisper_local_model=self.settings.whisper_local_model,
                 language=self.settings.audio_language
             )
@@ -72,20 +80,11 @@ class MeetingOrchestrator:
                 db.add(db_seg)
             db.commit()
 
-            # Step 3: Summarization & Analysis Agent
-            summarizer_key = (
-                self.settings.gemini_api_key if self.settings.summarization_engine == "gemini"
-                else self.settings.openai_api_key
-            )
-            summarizer_model = (
-                self.settings.gemini_model if self.settings.summarization_engine == "gemini"
-                else self.settings.openai_model
-            )
-
+            # Step 3: Summarization & Analysis Agent (using BYOK engine and key)
             agent = SummarizerAgent(
-                engine=self.settings.summarization_engine,
-                api_key=summarizer_key,
-                model=summarizer_model
+                engine=ai_config.summarization_engine,
+                api_key=ai_config.summarization_api_key,
+                model=ai_config.summarization_model
             )
             summary_result = agent.analyze(transcript=full_text, template=template)
 

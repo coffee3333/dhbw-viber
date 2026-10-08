@@ -114,8 +114,9 @@ def get_current_user_optional(request: Request, db: Session = Depends(get_db)) -
     if token:
         # 1. Try decoding as JWT
         payload = decode_access_token(token)
-        if payload and "user_id" in payload:
-            user = db.query(UserDB).filter(UserDB.id == payload["user_id"], UserDB.is_active == True).first()
+        uid = payload.get("user_id") or payload.get("sub") if payload else None
+        if uid:
+            user = db.query(UserDB).filter(UserDB.id == uid, UserDB.is_active == True).first()
             if user:
                 return user
 

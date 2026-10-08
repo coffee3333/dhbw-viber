@@ -1,10 +1,12 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.security import get_current_user_optional
+from app.models.user import UserDB
 from app.services.study_agent_service import StudyAgentService
 
 router = APIRouter(prefix="/agent", tags=["agent"])
@@ -33,11 +35,16 @@ class HistoryResponse(BaseModel):
 
 
 @router.post("/chat", response_model=ChatResponse)
-def chat_with_agent(req: ChatRequest, db: Session = Depends(get_db)):
+def chat_with_agent(
+    req: ChatRequest,
+    request: Request,
+    db: Session = Depends(get_db)
+):
     """
     Interact with the LangGraph Study Agent.
     Supports asking questions, editing lecture summaries live, and taking exam drills (/grill me).
     """
+    current_user: UserDB | None = get_current_user_optional(request, db)
     res = StudyAgentService.chat(
         db=db,
         message=req.message,
@@ -46,6 +53,7 @@ def chat_with_agent(req: ChatRequest, db: Session = Depends(get_db)):
         subject_id=req.subject_id,
         thread_id=req.thread_id,
         token_saver=req.token_saver,
+        user=current_user,
     )
     return ChatResponse(
         response=res["response"],

@@ -2,7 +2,7 @@ import { useEffect, useCallback } from "react";
 import { useAuthStore } from "../stores/useAuthStore";
 import { authApi } from "../api/authApi";
 import { onUnauthorized } from "../api/client";
-import type { LoginPayload, UserCredentialsUpdateRequest, AdminCreateUserRequest } from "../types/auth";
+import type { LoginPayload, UserCredentialsUpdateRequest, UserProfileUpdateRequest, AdminCreateUserRequest } from "../types/auth";
 
 export function useAuthViewModel() {
   const {
@@ -80,6 +80,17 @@ export function useAuthViewModel() {
     }
   };
 
+  const updateProfile = async (payload: UserProfileUpdateRequest) => {
+    try {
+      setLoading(true);
+      const res = await authApi.updateProfile(payload);
+      await fetchProfile();
+      return res;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const updateCredentials = async (payload: UserCredentialsUpdateRequest) => {
     try {
       setLoading(true);
@@ -122,6 +133,7 @@ export function useAuthViewModel() {
     logout,
     checkStatus,
     fetchProfile,
+    updateProfile,
     updateCredentials,
     adminCreateUser,
     adminDeleteUser,
