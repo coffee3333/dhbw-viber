@@ -76,7 +76,7 @@ spec:
       containers:
       - name: backend
         image: ghcr.io/coffee3333/meeting-agent-backend:latest
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
