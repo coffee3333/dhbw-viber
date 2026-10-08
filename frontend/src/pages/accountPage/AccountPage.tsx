@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import {
-  Cloud,
   ExternalLink,
   Sparkles,
   ShieldCheck,
@@ -12,8 +11,6 @@ import {
   Link,
   RefreshCw,
   Trash2,
-  ListTodo,
-  CheckCheck,
   Users,
   UserPlus,
   Eye,
@@ -30,36 +27,9 @@ import type { UserProfile } from "../../types/auth";
 export const AccountPage: React.FC = () => {
   const {
     settings,
-    googleStatus,
     saveSettings,
-    connectGoogle,
-    disconnectGoogle,
-    syncGoogleCalendar,
-    syncGoogleTasks,
-    pullGoogleTasks,
     isLoading,
   } = useAccountViewModel();
-
-  const [isSyncingTasks, setIsSyncingTasks] = useState(false);
-  const [isPullingTasks, setIsPullingTasks] = useState(false);
-
-  const handleSyncTasks = async () => {
-    try {
-      setIsSyncingTasks(true);
-      await syncGoogleTasks();
-    } finally {
-      setIsSyncingTasks(false);
-    }
-  };
-
-  const handlePullTasks = async () => {
-    try {
-      setIsPullingTasks(true);
-      await pullGoogleTasks();
-    } finally {
-      setIsPullingTasks(false);
-    }
-  };
 
   const {
     authRequired,
@@ -229,27 +199,15 @@ export const AccountPage: React.FC = () => {
   // Local state for settings form
   const [geminiKey, setGeminiKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
-  const [googleClientId, setGoogleClientId] = useState("");
-  const [googleClientSecret, setGoogleClientSecret] = useState("");
-  const [showGoogleConfig, setShowGoogleConfig] = useState(false);
   const [sttEngine, setSttEngine] = useState<"gemini" | "local_whisper" | "openai">("gemini");
   const [llmEngine, setLlmEngine] = useState<"gemini" | "openai">("gemini");
-  const [autoTasks, setAutoTasks] = useState(true);
-  const [autoDrive, setAutoDrive] = useState(false);
-  const [autoCalendar, setAutoCalendar] = useState(false);
   const [allowedOrigins, setAllowedOrigins] = useState("*");
 
   useEffect(() => {
     if (settings) {
       setSttEngine(settings.transcription_engine);
       setLlmEngine(settings.summarization_engine);
-      setAutoTasks(settings.google_auto_sync_tasks);
-      setAutoDrive(settings.google_auto_sync_drive);
-      setAutoCalendar(settings.google_auto_sync_calendar);
       setAllowedOrigins(settings.allowed_origins);
-      if (!settings.has_google_client_id) {
-        setShowGoogleConfig(true);
-      }
     }
   }, [settings]);
 
@@ -258,19 +216,12 @@ export const AccountPage: React.FC = () => {
     await saveSettings({
       transcription_engine: sttEngine,
       summarization_engine: llmEngine,
-      google_auto_sync_tasks: autoTasks,
-      google_auto_sync_drive: autoDrive,
-      google_auto_sync_calendar: autoCalendar,
       allowed_origins: allowedOrigins,
       ...(geminiKey.trim() ? { gemini_api_key: geminiKey.trim() } : {}),
       ...(openaiKey.trim() ? { openai_api_key: openaiKey.trim() } : {}),
-      ...(googleClientId.trim() ? { google_client_id: googleClientId.trim() } : {}),
-      ...(googleClientSecret.trim() ? { google_client_secret: googleClientSecret.trim() } : {}),
     });
     setGeminiKey("");
     setOpenaiKey("");
-    setGoogleClientId("");
-    setGoogleClientSecret("");
   };
 
   return (
@@ -624,213 +575,7 @@ export const AccountPage: React.FC = () => {
       </div>
 
       <form onSubmit={handleSave} className="space-y-6">
-        {/* SECTION 1: GOOGLE WORKSPACE */}
-        <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2.5">
-              <div className="w-9 h-9 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center">
-                <Cloud className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-bold text-sm text-white">Google Workspace Integration</h3>
-                <p className="text-xs text-slate-400">
-                  Sync schedule with Google Calendar, homework to Tasks, and recordings to Drive
-                </p>
-              </div>
-            </div>
-
-            {googleStatus?.connected ? (
-              <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-emerald-950/80 text-emerald-400 border border-emerald-500/20 flex items-center space-x-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                <span>Connected</span>
-              </span>
-            ) : (
-              <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-slate-800 text-slate-400">
-                Disconnected
-              </span>
-            )}
-          </div>
-
-          <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 flex items-center justify-between flex-wrap gap-3">
-            <div>
-              <div className="text-xs text-slate-300 font-medium">
-                {googleStatus?.connected
-                  ? `Active Account: ${googleStatus.email || "Google Account"}`
-                  : "Connect your Google account via OAuth 2.0"}
-              </div>
-              <div className="text-[11px] text-slate-500">
-                {googleStatus?.has_credentials
-                  ? "OAuth credentials configured"
-                  : "Set Google Client ID & Secret below or in backend/.env"}
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <button
-                type="button"
-                onClick={() => setShowGoogleConfig(!showGoogleConfig)}
-                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-medium transition"
-              >
-                {showGoogleConfig ? "Hide OAuth Setup" : "Configure Credentials"}
-              </button>
-              {googleStatus?.connected ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={handleSyncTasks}
-                    disabled={isSyncingTasks}
-                    className="px-3.5 py-2 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/40 text-xs font-semibold flex items-center space-x-1.5 transition disabled:opacity-50"
-                    title="Push all homework and study action items to Google Tasks with due dates for calendar display"
-                  >
-                    <ListTodo className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>{isSyncingTasks ? "Syncing Tasks..." : "Push Tasks to Google"}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handlePullTasks}
-                    disabled={isPullingTasks}
-                    className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center space-x-1.5 transition disabled:opacity-50"
-                    title="Pull completed status from Google Tasks / Google Calendar"
-                  >
-                    <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>{isPullingTasks ? "Checking..." : "Pull Status"}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={syncGoogleCalendar}
-                    className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center space-x-1.5 transition"
-                  >
-                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Push Schedule</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={disconnectGoogle}
-                    className="px-3.5 py-2 rounded-xl bg-red-950/40 hover:bg-red-900/50 text-red-300 border border-red-500/30 text-xs font-semibold transition"
-                  >
-                    Disconnect
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={connectGoogle}
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-600/20 transition flex items-center space-x-1.5"
-                >
-                  <Cloud className="w-4 h-4" />
-                  <span>Connect Google Account</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {googleStatus?.connected && (
-            <div className="p-3.5 rounded-xl bg-indigo-950/30 border border-indigo-500/20 flex items-start space-x-3 text-xs">
-              <ListTodo className="w-4 h-4 text-indigo-400 mt-0.5 flex-shrink-0" />
-              <div className="space-y-1">
-                <span className="font-semibold text-indigo-200 block">Google Calendar & Tasks Synchronization</span>
-                <p className="text-slate-400 text-[11px] leading-relaxed">
-                  Homework and study action items are synchronized directly to your <strong className="text-indigo-300">"DHBW Homework & Tasks"</strong> list in Google Tasks with explicit RFC 3339 due dates. Because they have due dates, Google Calendar renders them directly on your day grid alongside lectures. Completion checkboxes are synchronized bi-directionally.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Collapsible Google OAuth Credentials Setup */}
-          {showGoogleConfig && (
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-200">Google Cloud OAuth Credentials</span>
-                <a
-                  href="https://console.cloud.google.com/apis/credentials"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-blue-400 hover:underline flex items-center space-x-1 text-[11px]"
-                >
-                  <span>Google Cloud Console</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              </div>
-              <p className="text-[11px] text-slate-400 leading-relaxed">
-                In Google Cloud Console, create an <strong>OAuth 2.0 Web Application</strong> credential with Authorized Redirect URI:{" "}
-                <code className="px-1.5 py-0.5 rounded bg-slate-800 text-indigo-300 font-mono text-[10px]">
-                  http://localhost:8000/api/v1/google/oauth2callback
-                </code>
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-300">Google Client ID</label>
-                  <input
-                    type="text"
-                    placeholder={settings?.has_google_client_id ? "••••••••.apps.googleusercontent.com (Configured)" : "...apps.googleusercontent.com"}
-                    value={googleClientId}
-                    onChange={(e) => setGoogleClientId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono text-xs"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-300">Google Client Secret</label>
-                  <input
-                    type="password"
-                    placeholder={settings?.has_google_secret ? "•••••••• (Configured)" : "GOCSPX-..."}
-                    value={googleClientSecret}
-                    onChange={(e) => setGoogleClientSecret(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono text-xs"
-                  />
-                </div>
-              </div>
-              <p className="text-[11px] text-slate-500">
-                After pasting your credentials, click <strong>"Save Settings"</strong> at the bottom of the page, then click <strong>"Connect Google Account"</strong> above.
-              </p>
-            </div>
-          )}
-
-          {/* Automation Checkboxes */}
-          <div className="space-y-3 pt-2">
-            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
-              Automated Cloud Sync
-            </span>
-            <div className="space-y-2 text-xs">
-              <label className="flex items-center space-x-2.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={autoTasks}
-                  onChange={(e) => setAutoTasks(e.target.checked)}
-                  className="rounded text-indigo-600 focus:ring-0"
-                />
-                <span className="text-slate-300">
-                  Auto-create Google Tasks from lecture homework & assignments
-                </span>
-              </label>
-
-              <label className="flex items-center space-x-2.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={autoDrive}
-                  onChange={(e) => setAutoDrive(e.target.checked)}
-                  className="rounded text-indigo-600 focus:ring-0"
-                />
-                <span className="text-slate-300">
-                  Auto-backup study summaries and media recordings to Google Drive
-                </span>
-              </label>
-
-              <label className="flex items-center space-x-2.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={autoCalendar}
-                  onChange={(e) => setAutoCalendar(e.target.checked)}
-                  className="rounded text-indigo-600 focus:ring-0"
-                />
-                <span className="text-slate-300">
-                  Auto-push new DHBW timetable lectures to Google Calendar
-                </span>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        {/* SECTION 2: AI PROVIDERS */}
+        {/* SECTION 1: AI PROVIDERS */}
         <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-5">
           <div className="flex items-center space-x-2.5">
             <div className="w-9 h-9 rounded-xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center">

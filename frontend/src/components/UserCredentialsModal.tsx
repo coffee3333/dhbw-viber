@@ -12,18 +12,13 @@ import {
   Bot,
   FolderSync,
   Code2,
-  Cloud,
   Calendar,
   RefreshCw,
   LogOut,
-  ExternalLink,
   Sparkles,
-  Send,
-  Check,
   Upload,
 } from "lucide-react";
 import { useAuthViewModel } from "../viewmodels/useAuthViewModel";
-import { useAccountViewModel } from "../viewmodels/useAccountViewModel";
 import { useCalendarViewModel } from "../viewmodels/useCalendarViewModel";
 import { authApi } from "../api/authApi";
 import { showToast } from "../utils/toast";
@@ -36,6 +31,7 @@ export type UserCredentialsModalTab =
   | "profile"
   | "ai_models"
   | "developer_tools"
+  | "timetable"
   | "google_workspace"
   | "project"
   | "agent_guide"
@@ -68,14 +64,6 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
   } = useAuthViewModel();
 
   const {
-    googleStatus,
-    connectGoogle,
-    disconnectGoogle,
-    syncGoogleTasks,
-    pullGoogleTasks,
-  } = useAccountViewModel();
-
-  const {
     sources,
     syncUrl,
     uploadIcs,
@@ -87,6 +75,7 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
   const normalizeTab = (tab?: UserCredentialsModalTab): UserCredentialsModalTab => {
     if (!tab) return project ? "project" : "profile";
     if (tab === "credentials") return "ai_models";
+    if (tab === "google_workspace") return "timetable";
     return tab;
   };
 
@@ -95,8 +84,6 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
   // Profile Form State
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
-  const [telegramUsername, setTelegramUsername] = useState("");
-  const [telegramChatId, setTelegramChatId] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // AI BYOK Form State
@@ -118,9 +105,7 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
   const [gitAuthorEmail, setGitAuthorEmail] = useState("");
   const [isSavingDev, setIsSavingDev] = useState(false);
 
-  // Google & Timetable State
-  const [isSyncingTasks, setIsSyncingTasks] = useState(false);
-  const [isPullingTasks, setIsPullingTasks] = useState(false);
+  // Timetable State
   const [calUrlInput, setCalUrlInput] = useState("");
   const [calNameInput, setCalNameInput] = useState("");
   const [isSyncingCal, setIsSyncingCal] = useState(false);
@@ -149,8 +134,6 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
     if (currentUser) {
       setDisplayName(currentUser.display_name || "");
       setEmail(currentUser.email || "");
-      setTelegramUsername(currentUser.telegram_username || "");
-      setTelegramChatId(currentUser.telegram_chat_id || "");
     }
   }, [currentUser]);
 
@@ -202,8 +185,6 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
       await updateProfile({
         display_name: displayName.trim() || undefined,
         email: email.trim() || undefined,
-        telegram_username: telegramUsername.trim() || undefined,
-        telegram_chat_id: telegramChatId.trim() || undefined,
       });
       showToast.success("Profile Updated", "Your profile details have been saved.");
     } catch (err: any) {
@@ -293,24 +274,6 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
     }
   };
 
-  const handleSyncTasksNow = async () => {
-    try {
-      setIsSyncingTasks(true);
-      await syncGoogleTasks();
-    } finally {
-      setIsSyncingTasks(false);
-    }
-  };
-
-  const handlePullTasksNow = async () => {
-    try {
-      setIsPullingTasks(true);
-      await pullGoogleTasks();
-    } finally {
-      setIsPullingTasks(false);
-    }
-  };
-
   const handleSyncUrl = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!calUrlInput.trim()) return;
@@ -392,7 +355,7 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-      <div className="w-full max-w-4xl bg-[#0b0f19] border border-slate-800 rounded-3xl shadow-2xl overflow-hidden my-6 max-h-[92vh] flex flex-col">
+      <div className="w-full max-w-3xl bg-[#0b0f19] border border-slate-800 rounded-3xl shadow-2xl overflow-hidden my-6 max-h-[92vh] flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/60 flex-shrink-0">
           <div className="flex items-center space-x-3">
@@ -435,7 +398,7 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
             }`}
           >
             <User className="w-3.5 h-3.5" />
-            <span>Profile & Alerts</span>
+            <span>Profile</span>
           </button>
 
           {/* Tab 2: AI & Models BYOK */}
@@ -466,18 +429,18 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
             <span>Git & Jira Tools</span>
           </button>
 
-          {/* Tab 4: Google Workspace & Sync */}
+          {/* Tab 4: Timetable / Rapla */}
           <button
             type="button"
-            onClick={() => setActiveTab("google_workspace")}
+            onClick={() => setActiveTab("timetable")}
             className={`pb-2.5 px-3 font-semibold transition border-b-2 cursor-pointer flex items-center space-x-1.5 whitespace-nowrap ${
-              activeTab === "google_workspace"
+              activeTab === "timetable"
                 ? "border-indigo-500 text-indigo-400"
                 : "border-transparent text-slate-400 hover:text-slate-200"
             }`}
           >
-            <Cloud className="w-3.5 h-3.5" />
-            <span>Google & Timetable</span>
+            <Calendar className="w-3.5 h-3.5" />
+            <span>Timetable / Rapla</span>
           </button>
 
           {/* Project Specific Tabs */}
@@ -530,9 +493,9 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
 
         {/* Tab Body */}
         <div className="overflow-y-auto flex-1 flex flex-col p-6">
-          {/* TAB 1: Profile & Telegram Alerts */}
+          {/* TAB 1: Profile */}
           {activeTab === "profile" && (
-            <div className="space-y-6 max-w-2xl">
+            <div className="space-y-6 w-full">
               <form onSubmit={handleSaveProfile} className="space-y-4">
                 <div className="flex items-center space-x-4 p-4 rounded-2xl bg-slate-900/80 border border-slate-800">
                   <div className="w-14 h-14 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-300 font-bold text-lg">
@@ -572,55 +535,6 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
                   </div>
                 </div>
 
-                {/* Telegram Notifications Section */}
-                <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Send className="w-4 h-4 text-cyan-400" />
-                      <h4 className="text-xs font-bold text-white">Telegram Alerts & Summaries</h4>
-                    </div>
-                    {currentUser?.telegram_connected ? (
-                      <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center space-x-1">
-                        <Check className="w-3 h-3" />
-                        <span>Connected</span>
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-slate-400 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-full">
-                        Not Linked
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Receive instant lecture summary digests, action item reminders, and automated sprint notifications in Telegram.
-                  </p>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-slate-400">Telegram Username</label>
-                      <input
-                        type="text"
-                        value={telegramUsername}
-                        onChange={(e) => setTelegramUsername(e.target.value)}
-                        placeholder="@username"
-                        className="w-full px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-cyan-500"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-slate-400">Telegram Chat ID</label>
-                      <input
-                        type="text"
-                        value={telegramChatId}
-                        onChange={(e) => setTelegramChatId(e.target.value)}
-                        placeholder="e.g. 123456789"
-                        className="w-full px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-cyan-500 font-mono"
-                      />
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-slate-500">
-                    💡 Tip: Start <code>@userinfobot</code> in Telegram to find your unique numerical Chat ID.
-                  </p>
-                </div>
-
                 <div className="flex justify-between items-center pt-2">
                   <button
                     type="button"
@@ -649,20 +563,7 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
 
           {/* TAB 2: AI Models & BYOK */}
           {activeTab === "ai_models" && (
-            <div className="space-y-6 max-w-3xl">
-              {/* BYOK Info Banner */}
-              <div className="bg-gradient-to-r from-indigo-950/50 via-slate-900 to-indigo-950/30 border border-indigo-500/30 p-4 rounded-2xl text-xs space-y-2">
-                <div className="flex items-center space-x-2 text-indigo-300 font-bold">
-                  <Sparkles className="w-4 h-4 text-amber-400" />
-                  <span>Bring Your Own Key (BYOK) Architecture</span>
-                </div>
-                <p className="text-slate-300 text-[11px] leading-relaxed">
-                  Both <strong>Meeting Agent</strong> (transcription, lecture summaries, study chat) and{" "}
-                  <strong>Jira Automation</strong> (sprint planning, issue drafting) execute using your personal API keys when provided.
-                  Your keys are encrypted in PostgreSQL using Fernet AES-256 and never logged or exposed.
-                </p>
-              </div>
-
+            <div className="space-y-6 w-full">
               <form onSubmit={handleSaveAIConfig} className="space-y-6">
                 {/* Engine Selector */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -863,7 +764,7 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
 
           {/* TAB 3: Developer & Git Tools */}
           {activeTab === "developer_tools" && (
-            <div className="space-y-6 max-w-3xl">
+            <div className="space-y-6 w-full">
               <form onSubmit={handleSaveDevCredentials} className="space-y-4">
                 {/* Jira Account Mapping */}
                 <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2">
@@ -974,70 +875,9 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
             </div>
           )}
 
-          {/* TAB 4: Google Workspace & Timetable Sync */}
-          {activeTab === "google_workspace" && (
-            <div className="space-y-6 max-w-3xl">
-              {/* Google Workspace Connection Card */}
-              <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
-                      <Cloud className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-white">Google Workspace Integration</h4>
-                      <p className="text-[11px] text-slate-400">
-                        {googleStatus?.connected
-                          ? `Connected as ${googleStatus.email || "Active User"}`
-                          : "Connect your Google account for calendar and tasks sync"}
-                      </p>
-                    </div>
-                  </div>
-                  {googleStatus?.connected ? (
-                    <button
-                      type="button"
-                      onClick={disconnectGoogle}
-                      className="px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 font-semibold text-xs transition cursor-pointer"
-                    >
-                      Disconnect
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={connectGoogle}
-                      className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md transition cursor-pointer"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span>Connect Google</span>
-                    </button>
-                  )}
-                </div>
-
-                {googleStatus?.connected && (
-                  <div className="pt-2 border-t border-slate-800 flex items-center space-x-3">
-                    <button
-                      type="button"
-                      onClick={handleSyncTasksNow}
-                      disabled={isSyncingTasks}
-                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer"
-                    >
-                      <RefreshCw className={`w-3 h-3 ${isSyncingTasks ? "animate-spin" : ""}`} />
-                      <span>Sync Tasks Now</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handlePullTasksNow}
-                      disabled={isPullingTasks}
-                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer"
-                    >
-                      <RefreshCw className={`w-3 h-3 ${isPullingTasks ? "animate-spin" : ""}`} />
-                      <span>Pull Google Tasks</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-
+          {/* TAB 4: Timetable / Rapla Sync */}
+          {activeTab === "timetable" && (
+            <div className="space-y-6 w-full">
               {/* DHBW Timetable / Rapla Sync Card */}
               <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-4">
                 <div className="flex items-center justify-between">
@@ -1155,7 +995,7 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
 
           {/* TAB 7: Admin User Management */}
           {activeTab === "admin_users" && currentUser?.role === "admin" && (
-            <div className="space-y-6 max-w-3xl">
+            <div className="space-y-6 w-full">
               {/* Add member form */}
               <form onSubmit={handleCreateUser} className="p-4 rounded-xl bg-slate-900/80 border border-slate-700/60 space-y-3">
                 <h3 className="text-xs font-bold text-white flex items-center space-x-1.5">

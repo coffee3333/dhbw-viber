@@ -2,7 +2,6 @@ import { useCallback, useEffect } from "react";
 import { useCalendarStore } from "../stores/useCalendarStore";
 import { useMeetingStore } from "../stores/useMeetingStore";
 import { meetingsApi } from "../api/meetingsApi";
-import { googleApi } from "../api/googleApi";
 import { showToast } from "../utils/toast";
 
 export function useLectureDrawerViewModel() {
@@ -85,36 +84,6 @@ export function useLectureDrawerViewModel() {
     }
   };
 
-  const pushTasksToGoogle = async () => {
-    if (!activeMeeting) return;
-    try {
-      const res = await googleApi.syncTasks(activeMeeting.id);
-      showToast.success("Tasks Synced", res.message);
-    } catch {
-      // Handled by global API interceptor
-    }
-  };
-
-  const backupToGoogleDrive = async () => {
-    if (!activeMeeting) return;
-    try {
-      const res = await googleApi.backupDrive(activeMeeting.id);
-      showToast.success("Backup Completed", res.message);
-    } catch {
-      // Handled by global API interceptor
-    }
-  };
-
-  const syncThisLectureToCalendar = async () => {
-    if (!selectedLecture) return;
-    try {
-      const res = await googleApi.syncLecture(selectedLecture.id);
-      showToast.success("Calendar Synced", res.message);
-    } catch {
-      // Handled by global API interceptor
-    }
-  };
-
   const exportMarkdown = async () => {
     if (!activeMeeting) return;
     try {
@@ -143,9 +112,6 @@ export function useLectureDrawerViewModel() {
     setActiveTab: setActiveDrawerTab,
     closeDrawer,
     sendChatMessage,
-    pushTasksToGoogle,
-    backupToGoogleDrive,
-    syncThisLectureToCalendar,
     exportMarkdown,
   };
 }

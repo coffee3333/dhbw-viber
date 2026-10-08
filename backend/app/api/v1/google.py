@@ -48,15 +48,13 @@ class CreateActionItemRequest(BaseModel):
 
 @router.get("/status")
 def get_google_status(db: Session = Depends(get_db)):
-    connected, email = is_google_connected(db)
-    settings = get_settings()
     return {
-        "connected": connected,
-        "email": email,
-        "has_credentials": bool(settings.google_client_id and settings.google_client_secret),
-        "auto_sync_calendar": settings.google_auto_sync_calendar,
-        "auto_sync_tasks": settings.google_auto_sync_tasks,
-        "auto_sync_drive": settings.google_auto_sync_drive,
+        "connected": False,
+        "email": None,
+        "has_credentials": False,
+        "auto_sync_calendar": False,
+        "auto_sync_tasks": False,
+        "auto_sync_drive": False,
     }
 
 
@@ -287,17 +285,6 @@ def create_custom_action_item(data: CreateActionItemRequest, db: Session = Depen
     db.commit()
     db.refresh(ai)
 
-    # If Google connected, sync to Google Tasks immediately
-    connected, _ = is_google_connected(db)
-    if connected:
-        try:
-            m = ai.meeting
-            if m:
-                sync_action_items_to_google_tasks(db, m)
-                db.refresh(ai)
-        except Exception:
-            pass
-
     m = ai.meeting
     lec = m.lecture if m else None
     sub = lec.subject if lec else None
@@ -320,20 +307,13 @@ def create_custom_action_item(data: CreateActionItemRequest, db: Session = Depen
 
 @router.post("/action-items/{item_id}/toggle")
 def toggle_action_item(item_id: int, db: Session = Depends(get_db)):
-    """Toggle action item completion status and update Google Tasks in real-time."""
+    """Toggle action item completion status."""
     ai = db.query(ActionItemDB).filter(ActionItemDB.id == item_id).first()
     if not ai:
         raise HTTPException(status_code=404, detail="Action item not found")
 
     ai.completed = not ai.completed
     db.commit()
-
-    # Update Google Tasks in background if connected and has google_task_id
-    if ai.google_task_id:
-        try:
-            update_google_task_status(db, ai.google_task_id, ai.completed)
-        except Exception:
-            pass
 
     return {"id": ai.id, "completed": ai.completed, "google_task_id": ai.google_task_id}
 

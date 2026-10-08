@@ -7,18 +7,16 @@ import {
   Calendar,
   Plus,
   Trash2,
-  RefreshCw,
-  Cloud,
-  CheckCheck,
   Search,
   Filter,
   Tag,
+  RefreshCw,
+  CheckCheck,
 } from "lucide-react";
 import { googleApi } from "../api/googleApi";
 import { showToast } from "../utils/toast";
 import type { ActionItemWithContext, CreateTaskPayload } from "../types/tasks";
 import { useCalendarViewModel } from "../viewmodels/useCalendarViewModel";
-import { useSettingsStore } from "../stores/useSettingsStore";
 import { useAuthViewModel } from "../viewmodels/useAuthViewModel";
 
 interface TasksManagerModalProps {
@@ -28,14 +26,11 @@ interface TasksManagerModalProps {
 
 export const TasksManagerModal: React.FC<TasksManagerModalProps> = ({ isOpen, onClose }) => {
   const { subjects } = useCalendarViewModel();
-  const googleStatus = useSettingsStore((s) => s.googleStatus);
   const { currentUser } = useAuthViewModel();
   const isAdmin = currentUser?.role === "admin";
 
   const [tasks, setTasks] = useState<ActionItemWithContext[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [isPulling, setIsPulling] = useState(false);
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState("");
@@ -103,32 +98,6 @@ export const TasksManagerModal: React.FC<TasksManagerModalProps> = ({ isOpen, on
     }
   };
 
-  const handleSyncAllToGoogle = async () => {
-    try {
-      setIsSyncing(true);
-      const res = await googleApi.syncAllTasks();
-      showToast.success("Google Tasks Synced", res.message);
-      await loadTasks();
-    } catch (err: any) {
-      showToast.error("Sync failed", err.message);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  const handlePullFromGoogle = async () => {
-    try {
-      setIsPulling(true);
-      const res = await googleApi.pullTasks();
-      showToast.success("Tasks Status Updated", res.message);
-      await loadTasks();
-    } catch (err: any) {
-      showToast.error("Failed to pull status", err.message);
-    } finally {
-      setIsPulling(false);
-    }
-  };
-
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTaskTitle.trim()) return;
@@ -151,12 +120,7 @@ export const TasksManagerModal: React.FC<TasksManagerModalProps> = ({ isOpen, on
       setNewTaskSubject("");
       setIsCreateOpen(false);
 
-      showToast.success(
-        "Task Created",
-        created.google_task_id
-          ? "Task created and synced to Google Tasks & Calendar."
-          : "Task created locally."
-      );
+      showToast.success("Task Created", "Task created successfully.");
     } catch (err: any) {
       showToast.error("Failed to create task", err.message);
     } finally {
@@ -193,7 +157,6 @@ export const TasksManagerModal: React.FC<TasksManagerModalProps> = ({ isOpen, on
   const totalCount = tasks.length;
   const activeCount = tasks.filter((t) => !t.completed).length;
   const completedCount = tasks.filter((t) => t.completed).length;
-  const syncedCount = tasks.filter((t) => Boolean(t.google_task_id)).length;
 
   // Format date helper
   const formatDueDate = (
@@ -247,43 +210,14 @@ export const TasksManagerModal: React.FC<TasksManagerModalProps> = ({ isOpen, on
             <div>
               <div className="flex items-center space-x-2">
                 <h3 className="font-bold text-lg text-white">Academic Homework & Tasks</h3>
-                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                  Google Calendar Synced
-                </span>
               </div>
               <p className="text-xs text-slate-400">
-                Action items extracted from lectures or created manually. Synced with RFC 3339 due dates to Google Tasks.
+                Action items and homework assignments extracted from lectures or created manually.
               </p>
             </div>
           </div>
 
           <div className="flex items-center space-x-2">
-            {isAdmin && googleStatus?.connected && (
-              <>
-                <button
-                  type="button"
-                  onClick={handleSyncAllToGoogle}
-                  disabled={isSyncing}
-                  className="px-3 py-1.5 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/40 text-xs font-semibold flex items-center space-x-1.5 transition disabled:opacity-50 cursor-pointer shadow-sm"
-                  title="Push all pending tasks with due dates to Google Tasks & Calendar"
-                >
-                  <Cloud className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>{isSyncing ? "Syncing..." : "Push to Google"}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handlePullFromGoogle}
-                  disabled={isPulling}
-                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center space-x-1.5 transition disabled:opacity-50 cursor-pointer"
-                  title="Pull completion checkmarks from Google Tasks app or Google Calendar"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isPulling ? "animate-spin" : ""}`} />
-                  <span>{isPulling ? "Checking..." : "Pull Status"}</span>
-                </button>
-              </>
-            )}
-
             <button
               onClick={onClose}
               className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/60 transition cursor-pointer"
@@ -295,7 +229,7 @@ export const TasksManagerModal: React.FC<TasksManagerModalProps> = ({ isOpen, on
         </div>
 
         {/* Quick Metrics Bar */}
-        <div className="grid grid-cols-4 gap-2 px-6 py-3 bg-slate-950/40 border-b border-slate-800/60 text-xs">
+        <div className="grid grid-cols-3 gap-3 px-6 py-3 bg-slate-950/40 border-b border-slate-800/60 text-xs">
           <div className="flex items-center space-x-2">
             <span className="text-slate-400">Total:</span>
             <span className="font-bold text-white font-mono">{totalCount}</span>
@@ -307,10 +241,6 @@ export const TasksManagerModal: React.FC<TasksManagerModalProps> = ({ isOpen, on
           <div className="flex items-center space-x-2">
             <span className="text-emerald-400">Completed:</span>
             <span className="font-bold text-emerald-300 font-mono">{completedCount}</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <span className="text-indigo-400">Synced to Google:</span>
-            <span className="font-bold text-indigo-300 font-mono">{syncedCount}</span>
           </div>
         </div>
 
@@ -408,9 +338,6 @@ export const TasksManagerModal: React.FC<TasksManagerModalProps> = ({ isOpen, on
               <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider flex items-center space-x-1.5">
                 <Plus className="w-3.5 h-3.5" />
                 <span>Create New Task / Homework</span>
-              </span>
-              <span className="text-[11px] text-slate-500">
-                Automatically syncs with Google Calendar grid when connected
               </span>
             </div>
 
@@ -595,23 +522,6 @@ export const TasksManagerModal: React.FC<TasksManagerModalProps> = ({ isOpen, on
                         }`}
                       >
                         {t.priority}
-                      </span>
-                    )}
-
-                    {/* Google Tasks Status Indicator */}
-                    {t.google_task_id ? (
-                      <span
-                        className="p-1 rounded-md bg-emerald-950/60 text-emerald-400 border border-emerald-500/30 flex items-center"
-                        title="Synced to Google Tasks (Renders on Google Calendar)"
-                      >
-                        <Cloud className="w-3.5 h-3.5" />
-                      </span>
-                    ) : (
-                      <span
-                        className="p-1 rounded-md bg-slate-800 text-slate-500 border border-slate-700/60 flex items-center"
-                        title="Not synced to Google Tasks yet (Click 'Push to Google')"
-                      >
-                        <Cloud className="w-3.5 h-3.5 opacity-40" />
                       </span>
                     )}
 

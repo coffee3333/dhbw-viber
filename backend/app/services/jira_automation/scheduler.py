@@ -54,16 +54,8 @@ def get_jira_client_for_project(project: AutomationProjectDB) -> JiraClient | No
 
 
 async def send_project_telegram(project: AutomationProjectDB, message: str) -> None:
-    """Send Telegram message if bot token and channel are configured."""
-    if not project.telegram_bot_token_encrypted or not project.telegram_channel_chat_id:
-        return
-    token = decrypt_secret(project.telegram_bot_token_encrypted)
-    if not token:
-        return
-    try:
-        await TelegramNotifier.send_message(token, project.telegram_channel_chat_id, message)
-    except Exception as e:
-        logger.warning(f"[Scheduler] Telegram alert error: {e}")
+    """Telegram integration removed."""
+    return
 
 
 async def execute_sprint_close(

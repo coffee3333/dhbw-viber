@@ -9,8 +9,6 @@ import {
   ListTodo,
   Bot,
   Download,
-  Share2,
-  CloudUpload,
   Radio,
   Send,
 } from "lucide-react";
@@ -34,9 +32,6 @@ export const LectureDrawer: React.FC<LectureDrawerProps> = ({ onOpenRecorderForL
     setActiveTab,
     closeDrawer,
     sendChatMessage,
-    pushTasksToGoogle,
-    backupToGoogleDrive,
-    syncThisLectureToCalendar,
     exportMarkdown,
   } = useLectureDrawerViewModel();
 
@@ -129,51 +124,18 @@ export const LectureDrawer: React.FC<LectureDrawerProps> = ({ onOpenRecorderForL
             )}
           </div>
 
-          {/* Quick Action Cloud Buttons */}
-          <div className="flex items-center space-x-2 pt-2">
-            {isAdmin && (
+          {meeting && (
+            <div className="flex items-center space-x-2 pt-2">
               <button
-                onClick={syncThisLectureToCalendar}
+                onClick={exportMarkdown}
                 className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center space-x-1.5 transition"
+                title="Export Markdown Notes"
               >
-                <Share2 className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Sync to Google Calendar</span>
+                <Download className="w-3.5 h-3.5 text-amber-400" />
+                <span>Export Notes</span>
               </button>
-            )}
-
-            {meeting && (
-              <>
-                {isAdmin && (
-                  <>
-                    <button
-                      onClick={pushTasksToGoogle}
-                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center space-x-1.5 transition"
-                    >
-                      <ListTodo className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Push Tasks</span>
-                    </button>
-
-                    <button
-                      onClick={backupToGoogleDrive}
-                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center space-x-1.5 transition"
-                    >
-                      <CloudUpload className="w-3.5 h-3.5 text-blue-400" />
-                      <span>Backup Drive</span>
-                    </button>
-                  </>
-                )}
-
-                <button
-                  onClick={exportMarkdown}
-                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center space-x-1.5 transition"
-                  title="Export Markdown Notes"
-                >
-                  <Download className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Export</span>
-                </button>
-              </>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Media Player or Record CTA */}
