@@ -116,6 +116,27 @@ export interface LectureChainItem {
   chips?: string[];
 }
 
+export interface CreateLecturePayload {
+  subject_id: string;
+  title: string;
+  start_time: string;
+  end_time: string;
+  room?: string | null;
+  meeting_link?: string | null;
+  description?: string | null;
+  status?: string;
+}
+
+export interface UpdateLecturePayload {
+  title?: string;
+  start_time?: string;
+  end_time?: string;
+  room?: string | null;
+  meeting_link?: string | null;
+  description?: string | null;
+  status?: string;
+}
+
 export interface SubjectDetail {
   id: string;
   name: string;

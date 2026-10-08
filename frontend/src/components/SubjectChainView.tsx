@@ -10,11 +10,17 @@ import {
   CalendarX,
   History,
   ArrowLeft,
-  BookOpen
+  BookOpen,
+  Plus,
+  Pencil,
+  Trash2,
 } from "lucide-react";
-import type { SubjectDetail } from "../types/calendar";
+import type { SubjectDetail, LectureChainItem, CreateLecturePayload, UpdateLecturePayload } from "../types/calendar";
 import { AgentChatPanel } from "./AgentChatPanel";
 import { useAuthViewModel } from "../viewmodels/useAuthViewModel";
+import { useCalendarViewModel } from "../viewmodels/useCalendarViewModel";
+import { ClassModal } from "./ClassModal";
+import { showToast } from "../utils/toast";
 
 interface SubjectChainViewProps {
   subject: SubjectDetail;
@@ -29,10 +35,50 @@ export const SubjectChainView: React.FC<SubjectChainViewProps> = ({
   onSelectLecture,
 }) => {
   const { currentUser } = useAuthViewModel();
+  const { createLecture, updateLecture, deleteLecture } = useCalendarViewModel();
   const isAdmin = currentUser?.role === "admin";
 
   const [filterMode, setFilterMode] = useState<"all" | "upcoming" | "past" | "exceptions">("all");
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isClassModalOpen, setIsClassModalOpen] = useState(false);
+  const [lectureToEdit, setLectureToEdit] = useState<LectureChainItem | null>(null);
+
+  const handleOpenAddClass = () => {
+    setLectureToEdit(null);
+    setIsClassModalOpen(true);
+  };
+
+  const handleOpenEditClass = (lec: LectureChainItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLectureToEdit(lec);
+    setIsClassModalOpen(true);
+  };
+
+  const handleDeleteClassDirect = async (lec: LectureChainItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(`Are you sure you want to delete class slot "${lec.title}"?`)) return;
+    try {
+      await deleteLecture(lec.id);
+      showToast.success("Class Deleted", `"${lec.title}" was removed.`);
+    } catch (err: any) {
+      showToast.error("Failed to delete class", err.message);
+    }
+  };
+
+  const handleSaveClass = async (payload: CreateLecturePayload | UpdateLecturePayload) => {
+    if (lectureToEdit) {
+      await updateLecture(lectureToEdit.id, payload as UpdateLecturePayload);
+      showToast.success("Class Saved", `"${payload.title || lectureToEdit.title}" updated.`);
+    } else {
+      await createLecture(payload as CreateLecturePayload);
+      showToast.success("Class Added", `"${payload.title}" added.`);
+    }
+  };
+
+  const handleDeleteClassFromModal = async (lectureId: string) => {
+    await deleteLecture(lectureId);
+    showToast.success("Class Deleted", "Class slot removed.");
+  };
 
   const { stats, lectures } = subject;
 
@@ -91,6 +137,15 @@ export const SubjectChainView: React.FC<SubjectChainViewProps> = ({
               </div>
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={handleOpenAddClass}
+            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md shadow-indigo-600/30 transition cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Class</span>
+          </button>
 
         </div>
 
@@ -184,8 +239,24 @@ export const SubjectChainView: React.FC<SubjectChainViewProps> = ({
       {/* 4. The Lecture Chain (Center-Connected Chain Layout) */}
       <div className="space-y-0">
         {filteredLectures.length === 0 ? (
-          <div className="text-center py-12 text-slate-500 text-xs italic">
-            No lectures found for this filter.
+          <div className="flex flex-col items-center justify-center py-16 px-4 bg-slate-900/40 border border-dashed border-slate-800 rounded-2xl text-center space-y-3 my-4">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+              <BookOpen className="w-6 h-6" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-slate-200">No classes scheduled yet</h4>
+              <p className="text-xs text-slate-400 mt-1 max-w-sm">
+                There are no class slots for "{subject.name}". Click below to add your first class slot.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleOpenAddClass}
+              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md shadow-indigo-600/30 transition cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add First Class</span>
+            </button>
           </div>
         ) : (
           filteredLectures.map((lec, idx) => {
@@ -376,9 +447,29 @@ export const SubjectChainView: React.FC<SubjectChainViewProps> = ({
                       >
                         {lec.title}
                       </h3>
-                      <div className="flex items-center space-x-2 text-slate-400 group-hover:text-indigo-400 text-xs font-semibold">
-                        <span className="hidden sm:inline">Open Lesson</span>
-                        <ArrowRight className="w-4 h-4 transform group-hover:translate-x-1 transition" />
+                      <div className="flex items-center space-x-1 text-slate-400 group-hover:text-indigo-400 text-xs font-semibold">
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => handleOpenEditClass(lec, e)}
+                          title="Edit Class Slot"
+                          className="p-1 rounded-md text-slate-400 hover:text-indigo-300 hover:bg-slate-800 transition cursor-pointer"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </span>
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => handleDeleteClassDirect(lec, e)}
+                          title="Delete Class Slot"
+                          className="p-1 rounded-md text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </span>
+                        <div className="flex items-center space-x-1 ml-1">
+                          <span className="hidden sm:inline">Open Lesson</span>
+                          <ArrowRight className="w-4 h-4 transform group-hover:translate-x-1 transition" />
+                        </div>
                       </div>
                     </div>
 
@@ -431,6 +522,17 @@ export const SubjectChainView: React.FC<SubjectChainViewProps> = ({
           onToggle={() => setIsChatOpen(!isChatOpen)}
         />
       )}
+
+      {/* Class Create / Edit Modal */}
+      <ClassModal
+        isOpen={isClassModalOpen}
+        onClose={() => setIsClassModalOpen(false)}
+        subjectId={subject.id}
+        subjectName={subject.name}
+        lectureToEdit={lectureToEdit}
+        onSave={handleSaveClass}
+        onDelete={handleDeleteClassFromModal}
+      />
     </div>
   );
 };

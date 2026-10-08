@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { useCalendarStore } from "../stores/useCalendarStore";
 import { useMeetingStore } from "../stores/useMeetingStore";
 import { calendarApi } from "../api/calendarApi";
-import type { Lecture, SubjectDetail, CreateSubjectPayload, UpdateSubjectPayload } from "../types/calendar";
+import type { Lecture, SubjectDetail, CreateSubjectPayload, UpdateSubjectPayload, CreateLecturePayload, UpdateLecturePayload } from "../types/calendar";
 
 
 export function useCalendarViewModel() {
@@ -327,6 +327,68 @@ export function useCalendarViewModel() {
     }
   };
 
+  const createLecture = async (payload: CreateLecturePayload) => {
+    try {
+      setLoading(true);
+      const res = await calendarApi.createLecture(payload);
+      if (selectedSubjectId === payload.subject_id) {
+        try {
+          const detail = await calendarApi.getSubjectDetail(payload.subject_id);
+          setSelectedSubjectDetail(detail);
+        } catch {
+          // Ignore
+        }
+      }
+      await fetchCalendarData();
+      return res;
+    } catch (err: any) {
+      throw new Error(err.message || "Failed to create class.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateLecture = async (lectureId: string, payload: UpdateLecturePayload) => {
+    try {
+      setLoading(true);
+      const res = await calendarApi.updateLecture(lectureId, payload);
+      if (selectedSubjectId) {
+        try {
+          const detail = await calendarApi.getSubjectDetail(selectedSubjectId);
+          setSelectedSubjectDetail(detail);
+        } catch {
+          // Ignore
+        }
+      }
+      await fetchCalendarData();
+      return res;
+    } catch (err: any) {
+      throw new Error(err.message || "Failed to update class.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteLecture = async (lectureId: string) => {
+    try {
+      setLoading(true);
+      await calendarApi.deleteLecture(lectureId);
+      if (selectedSubjectId) {
+        try {
+          const detail = await calendarApi.getSubjectDetail(selectedSubjectId);
+          setSelectedSubjectDetail(detail);
+        } catch {
+          // Ignore
+        }
+      }
+      await fetchCalendarData();
+    } catch (err: any) {
+      throw new Error(err.message || "Failed to delete class.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const cleanupHolidays = async () => {
     try {
       setLoading(true);
@@ -442,6 +504,9 @@ export function useCalendarViewModel() {
     createSubject,
     updateSubject,
     deleteSubject,
+    createLecture,
+    updateLecture,
+    deleteLecture,
     cleanupHolidays,
     toggleSubjectFilter,
     clearSubjectFilters,

@@ -9,6 +9,9 @@ import type {
   LectureDetail,
   CreateSubjectPayload,
   UpdateSubjectPayload,
+  CreateLecturePayload,
+  UpdateLecturePayload,
+  LectureChainItem,
 } from "../types/calendar";
 
 export const calendarApi = {
@@ -34,6 +37,20 @@ export const calendarApi = {
   async getSubjectDetail(subjectId: string): Promise<SubjectDetail> {
     const res = await apiClient.get<SubjectDetail>(`/calendar/subjects/${subjectId}`);
     return res.data;
+  },
+
+  async createLecture(payload: CreateLecturePayload): Promise<LectureChainItem> {
+    const res = await apiClient.post<LectureChainItem>("/calendar/lectures", payload);
+    return res.data;
+  },
+
+  async updateLecture(lectureId: string, payload: UpdateLecturePayload): Promise<LectureChainItem> {
+    const res = await apiClient.put<LectureChainItem>(`/calendar/lectures/${lectureId}`, payload);
+    return res.data;
+  },
+
+  async deleteLecture(lectureId: string): Promise<void> {
+    await apiClient.delete(`/calendar/lectures/${lectureId}`);
   },
 
   async updateLectureStatus(lectureId: string, status: string): Promise<{ message: string; status: string }> {
