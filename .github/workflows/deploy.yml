@@ -1,0 +1,53 @@
+name: Build and Push Container Images
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  GITHUB_USER: coffee3333
+  BACKEND_IMAGE: ghcr.io/coffee3333/meeting-agent-backend
+  FRONTEND_IMAGE: ghcr.io/coffee3333/meeting-agent-frontend
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      # 1. Checkout repository source code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Log in to GitHub Container Registry (GHCR) using built-in token
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 3. Build & push Backend Docker image
+      - name: Build & Push Backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ env.BACKEND_IMAGE }}:latest
+            ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+
+      # 4. Build & push Frontend Docker image
+      - name: Build & Push Frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:latest
+            ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}

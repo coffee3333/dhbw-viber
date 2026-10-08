@@ -1,0 +1,6 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dhbw-viber
+  labels:
+    app.kubernetes.io/name: dhbw-viber
