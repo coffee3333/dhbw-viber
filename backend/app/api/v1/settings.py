@@ -7,8 +7,8 @@ from app.models.schemas import SettingsUpdateSchema
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
-@router.get("")
-@router.get("/")
+@router.get("", dependencies=[Depends(require_admin)])
+@router.get("/", dependencies=[Depends(require_admin)])
 def read_settings():
     s = get_settings()
     gemini_masked = f"...{s.gemini_api_key[-4:]}" if s.gemini_api_key and len(s.gemini_api_key) > 4 else ("Set" if s.gemini_api_key else "")

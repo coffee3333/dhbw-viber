@@ -318,7 +318,7 @@ def create_custom_action_item(data: CreateActionItemRequest, db: Session = Depen
     }
 
 
-@router.post("/action-items/{item_id}/toggle", dependencies=[Depends(require_admin)])
+@router.post("/action-items/{item_id}/toggle")
 def toggle_action_item(item_id: int, db: Session = Depends(get_db)):
     """Toggle action item completion status and update Google Tasks in real-time."""
     ai = db.query(ActionItemDB).filter(ActionItemDB.id == item_id).first()

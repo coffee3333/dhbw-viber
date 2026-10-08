@@ -165,17 +165,6 @@ def is_authenticated(request: Request) -> bool:
     return user_id is not None
 
 
-def require_auth(request: Request) -> bool:
-    """FastAPI route dependency ensuring authentication."""
-    if not is_authenticated(request):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required. Please log in.",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-    return True
-
-
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> Any:
     """Dependency that resolves the active authenticated user."""
     user = get_current_user_optional(request, db)
@@ -186,6 +175,11 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> Any:
             headers={"WWW-Authenticate": "Bearer"}
         )
     return user
+
+
+def require_auth(user: Any = Depends(get_current_user)) -> bool:
+    """FastAPI route dependency ensuring an active, valid user account exists in the database."""
+    return True
 
 
 def require_admin(user: Any = Depends(get_current_user)) -> Any:
