@@ -77,33 +77,50 @@ def get_auth_status(request: Request, db: Session = Depends(get_db)):
     }
 
 
+def get_client_ip(request: Request) -> str:
+    """Safely extracts real client IP even behind reverse proxies (Cloudflare/Traefik)."""
+    cf_ip = request.headers.get("CF-Connecting-IP")
+    if cf_ip and cf_ip.strip():
+        return cf_ip.strip().split(",")[0].strip()
+    x_real_ip = request.headers.get("X-Real-IP")
+    if x_real_ip and x_real_ip.strip():
+        return x_real_ip.strip().split(",")[0].strip()
+    xff = request.headers.get("X-Forwarded-For")
+    if xff and xff.strip():
+        return xff.split(",")[0].strip()
+    if request.client:
+        return request.client.host
+    return "unknown"
+
+
 @router.post("/login")
 def login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     """Authenticate via username/password or master password and issue secure JWT."""
     settings = get_settings()
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
+    identifier = (payload.username or payload.email or "").strip().lower()
+    rate_key = f"{client_ip}:{identifier or 'master'}"
 
-    if not check_rate_limit(client_ip):
+    if not check_rate_limit(rate_key):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many failed login attempts. Please wait 5 minutes."
         )
 
     # 1. Username/Password login (Multi-User)
-    identifier = (payload.username or payload.email or "").strip().lower()
     if identifier:
         user = db.query(UserDB).filter(
             (UserDB.username == identifier) | (UserDB.email == identifier)
         ).first()
         if not user or not user.is_active or not verify_password(payload.password, user.password_hash):
-            failed_count = record_failed_attempt(client_ip)
+            failed_count = record_failed_attempt(rate_key)
             remaining = max(0, 5 - failed_count)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=f"Invalid username or password. ({remaining} attempts remaining)"
             )
 
-        reset_failed_attempts(client_ip)
+        reset_failed_attempts(rate_key)
         token = create_access_token({"user_id": user.id, "username": user.username, "role": user.role})
 
         response.set_cookie(
@@ -132,14 +149,14 @@ def login(payload: LoginRequest, request: Request, response: Response, db: Sessi
     # 2. Master Password fallback
     if settings.app_password and settings.app_password.strip():
         if not secrets.compare_digest(payload.password.encode("utf-8"), settings.app_password.encode("utf-8")):
-            failed_count = record_failed_attempt(client_ip)
+            failed_count = record_failed_attempt(rate_key)
             remaining = max(0, 5 - failed_count)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=f"Invalid password. ({remaining} attempts remaining)"
             )
 
-        reset_failed_attempts(client_ip)
+        reset_failed_attempts(rate_key)
         admin = db.query(UserDB).filter(UserDB.role == "admin").first()
         admin_id = admin.id if admin else "admin"
         admin_username = admin.username if admin else "admin"

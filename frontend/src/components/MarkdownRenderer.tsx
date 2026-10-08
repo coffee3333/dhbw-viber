@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { marked } from "marked";
+import DOMPurify from "dompurify";
 import { Check, Copy } from "lucide-react";
 
 interface MarkdownRendererProps {
@@ -20,13 +21,17 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
   const htmlContent = useMemo(() => {
     if (!content || !content.trim()) return "";
     try {
-      return marked.parse(content, {
+      const rawHtml = marked.parse(content, {
         gfm: true,
         breaks: true,
       }) as string;
+      return DOMPurify.sanitize(rawHtml, {
+        USE_PROFILES: { html: true },
+        ADD_ATTR: ["target", "rel"],
+      });
     } catch (err) {
       console.error("Markdown parse failed:", err);
-      return `<p>${content}</p>`;
+      return `<p>${DOMPurify.sanitize(content)}</p>`;
     }
   }, [content]);
 

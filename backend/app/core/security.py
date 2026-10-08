@@ -126,9 +126,13 @@ def get_current_user_optional(request: Request, db: Session = Depends(get_db)) -
             max_age_seconds=settings.session_expire_days * 86400
         )
         if user_id:
-            user = db.query(UserDB).filter(UserDB.role == "admin").first()
+            user = db.query(UserDB).filter(UserDB.id == user_id, UserDB.is_active == True).first()
             if user:
                 return user
+            if user_id in ("admin", "master", "default") and settings.app_password:
+                user = db.query(UserDB).filter(UserDB.role == "admin", UserDB.is_active == True).first()
+                if user:
+                    return user
 
     return None
 

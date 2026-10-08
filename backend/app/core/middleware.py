@@ -23,10 +23,11 @@ def setup_middleware(app: FastAPI, settings: Settings) -> None:
     """Configures structured logging, security headers, and CORS."""
     app.add_middleware(RequestLoggingMiddleware, logger=get_logger("meeting_agent.http"))
     app.add_middleware(SecurityHeadersMiddleware)
+    allow_wildcard = settings.cors_origins == ["*"]
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
-        allow_credentials=True,
+        allow_credentials=not allow_wildcard,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )

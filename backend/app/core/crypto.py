@@ -10,9 +10,13 @@ def _get_fernet_instance() -> Fernet:
     master_key = getattr(settings, "encryption_master_key", None)
     
     if not master_key or not master_key.strip():
-        # Derive a 32-byte URL-safe base64 key from app_password or secret fallback
-        seed = (settings.app_password or "meeting-agent-default-master-key-seed-2026").encode("utf-8")
+        # Derive a cryptographically secure 32-byte URL-safe base64 key from persistent secret_key
+        seed = f"{settings.secret_key}::meeting-agent-db-encryption-v1".encode("utf-8")
         derived_32 = hashlib.sha256(seed).digest()
+        master_key = base64.urlsafe_b64encode(derived_32).decode("utf-8")
+    elif len(master_key.strip()) != 44 or not master_key.endswith("="):
+        # If user supplied a passphrase rather than a 32-byte base64 key, derive safely
+        derived_32 = hashlib.sha256(master_key.encode("utf-8")).digest()
         master_key = base64.urlsafe_b64encode(derived_32).decode("utf-8")
     
     # Ensure key is valid urlsafe base64 32 bytes

@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.core.config import DATA_DIR, MATERIALS_DIR
 from app.core.database import get_db
 from app.core.logger import get_logger
-from app.core.security import require_admin
+from app.core.security import require_admin, require_auth
 from app.models.db import ActionItemDB, CalendarSourceDB, LectureDB, MeetingDB, SubjectDB
 from app.models.schemas import (
     CalendarSourceSchema,
@@ -769,11 +769,25 @@ def upload_lecture_material(
     return {"message": "Material uploaded and indexed", "material": new_item, "materials": current_materials}
 
 
-@router.get("/materials/file/{lecture_id}/{filename}")
+@router.get("/materials/file/{lecture_id}/{filename}", dependencies=[Depends(require_auth)])
 def get_material_file(lecture_id: str, filename: str):
-    file_path = MATERIALS_DIR / lecture_id / filename
-    if not file_path.exists():
+    """Serve lecture material file with path traversal defense and authentication."""
+    if "/" in lecture_id or "\\" in lecture_id or ".." in lecture_id:
+        raise HTTPException(status_code=400, detail="Invalid lecture identifier")
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid material filename")
+
+    base_materials_dir = MATERIALS_DIR.resolve()
+    file_path = (MATERIALS_DIR / lecture_id / filename).resolve()
+
+    try:
+        is_safe = file_path.is_relative_to(base_materials_dir)
+    except AttributeError:
+        is_safe = str(file_path).startswith(str(base_materials_dir))
+
+    if not is_safe or not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
+
     return FileResponse(file_path, filename=filename)
 
 
