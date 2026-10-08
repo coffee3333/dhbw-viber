@@ -1271,21 +1271,19 @@ export const LectureSubSection: React.FC<LectureSubSectionProps> = ({
         </div>
       </div>
 
-      {/* Right Side: Hideable AI Lecture Agent Chat Bar (Admin Only) */}
-      {isAdmin && (
-        <AgentChatPanel
-          scope="lecture"
-          lectureId={lecture.id}
-          lectureTitle={lecture.title}
-          subjectId={subject.id}
-          subjectName={subject.name}
-          isOpen={isChatOpen}
-          onToggle={() => setIsChatOpen(!isChatOpen)}
-          onSummaryUpdated={(newMd) => {
-            setLiveSummaryOverride(newMd);
-          }}
-        />
-      )}
+      {/* Right Side: Hideable AI Lecture Agent Chat Bar */}
+      <AgentChatPanel
+        scope="lecture"
+        lectureId={lecture.id}
+        lectureTitle={lecture.title}
+        subjectId={subject.id}
+        subjectName={subject.name}
+        isOpen={isChatOpen}
+        onToggle={() => setIsChatOpen(!isChatOpen)}
+        onSummaryUpdated={(newMd) => {
+          setLiveSummaryOverride(newMd);
+        }}
+      />
     </div>
   );
 };

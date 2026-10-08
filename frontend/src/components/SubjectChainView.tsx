@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import type { SubjectDetail, LectureChainItem, CreateLecturePayload, UpdateLecturePayload } from "../types/calendar";
 import { AgentChatPanel } from "./AgentChatPanel";
-import { useAuthViewModel } from "../viewmodels/useAuthViewModel";
 import { useCalendarViewModel } from "../viewmodels/useCalendarViewModel";
 import { ClassModal } from "./ClassModal";
 import { showToast } from "../utils/toast";
@@ -34,9 +33,7 @@ export const SubjectChainView: React.FC<SubjectChainViewProps> = ({
   onBackToOverview,
   onSelectLecture,
 }) => {
-  const { currentUser } = useAuthViewModel();
   const { createLecture, updateLecture, deleteLecture } = useCalendarViewModel();
-  const isAdmin = currentUser?.role === "admin";
 
   const [filterMode, setFilterMode] = useState<"all" | "upcoming" | "past" | "exceptions">("all");
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -512,16 +509,14 @@ export const SubjectChainView: React.FC<SubjectChainViewProps> = ({
         </div>
       </div>
 
-      {/* Right Side: Hideable Course-Wide AI Agent Chat Bar (Admin Only) */}
-      {isAdmin && (
-        <AgentChatPanel
-          scope="subject"
-          subjectId={subject.id}
-          subjectName={subject.name}
-          isOpen={isChatOpen}
-          onToggle={() => setIsChatOpen(!isChatOpen)}
-        />
-      )}
+      {/* Right Side: Hideable Course-Wide AI Agent Chat Bar */}
+      <AgentChatPanel
+        scope="subject"
+        subjectId={subject.id}
+        subjectName={subject.name}
+        isOpen={isChatOpen}
+        onToggle={() => setIsChatOpen(!isChatOpen)}
+      />
 
       {/* Class Create / Edit Modal */}
       <ClassModal

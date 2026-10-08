@@ -24,6 +24,7 @@ interface AgentChatPanelProps {
   isOpen: boolean;
   onToggle: () => void;
   onSummaryUpdated?: (newMarkdown: string) => void;
+  onOpenCredentialsModal?: () => void;
 }
 
 export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
@@ -35,17 +36,52 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
   isOpen,
   onToggle,
   onSummaryUpdated,
+  onOpenCredentialsModal,
 }) => {
   const [messages, setMessages] = useState<AgentChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [copiedMessageIdx, setCopiedMessageIdx] = useState<number | null>(null);
+  const [panelWidth, setPanelWidth] = useState<number>(380);
+  const [isResizing, setIsResizing] = useState<boolean>(false);
   const [tokenSaver, setTokenSaver] = useState<boolean>(() => {
     return localStorage.getItem("meeting_agent_token_saver") === "true";
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Resizing logic
+  const startResizing = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      const newWidth = window.innerWidth - e.clientX;
+      if (newWidth >= 300 && newWidth <= 750) {
+        setPanelWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      if (isResizing) {
+        setIsResizing(false);
+      }
+    };
+
+    if (isResizing) {
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+    }
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizing]);
 
   const toggleTokenSaver = () => {
     setTokenSaver((prev) => {
@@ -145,9 +181,20 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
         onSummaryUpdated(res.updated_summary);
       }
     } catch (err: any) {
+      const errDetail = err?.response?.data?.detail || err?.message || "";
+      const isApiKeyMissing =
+        errDetail.includes("API key") ||
+        errDetail.includes("token") ||
+        errDetail.includes("BYOK") ||
+        errDetail.includes("credentials") ||
+        errDetail.includes("OpenAI") ||
+        errDetail.includes("Gemini");
+
       const errorMsg: AgentChatMessage = {
         role: "assistant",
-        content: `⚠️ Failed to get a response: ${err?.message || "Unknown error"}. Please try again.`,
+        content: isApiKeyMissing
+          ? `⚠️ **API Key Required**: No valid LLM API Key (OpenAI, Gemini, or Anthropic) was found for your account.\n\nPlease configure your personal API Key in **Credentials & BYOK** settings to enable AI features.`
+          : `⚠️ Failed to get a response: ${errDetail || "Unknown error"}. Please try again.`,
         timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errorMsg]);
@@ -188,18 +235,27 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
     return (
       <button
         onClick={onToggle}
-        className="fixed right-4 bottom-6 z-40 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 text-white font-bold text-xs shadow-2xl hover:shadow-indigo-500/30 flex items-center space-x-2 hover:scale-105 transition-all border border-indigo-400/30"
+        className="fixed right-6 bottom-6 z-40 px-4 py-2.5 rounded-full bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 text-white font-bold text-xs shadow-2xl hover:shadow-purple-500/40 flex items-center space-x-2.5 hover:scale-105 transition-all border border-purple-400/30 cursor-pointer"
         title="Open AI Chat Assistant"
       >
         <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
         <span>AI Study Agent</span>
-        <span className="w-2 h-2 rounded-full bg-emerald-400" />
+        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
       </button>
     );
   }
 
   return (
-    <aside className="w-[420px] max-w-full flex flex-col h-full bg-slate-900 border-l border-slate-800 shadow-2xl relative z-30 select-text">
+    <aside
+      style={{ width: `${panelWidth}px` }}
+      className="max-w-full flex flex-col h-full bg-slate-900 border-l border-slate-800 shadow-2xl relative z-30 select-text transition-all duration-75"
+    >
+      {/* Resizing Handle on the left edge */}
+      <div
+        onMouseDown={startResizing}
+        className="absolute top-0 bottom-0 -left-1 w-2 cursor-ew-resize hover:bg-indigo-500/50 transition z-40"
+        title="Drag to resize panel"
+      />
       {/* 1. Header Bar */}
       <div className="p-4 border-b border-slate-800/80 bg-slate-950/70 flex items-center justify-between gap-2">
         <div className="flex items-center space-x-2.5 min-w-0">
@@ -374,8 +430,17 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
                 )}
 
                 {/* Assistant Markdown Card */}
-                <div className="p-3.5 rounded-2xl rounded-tl-sm bg-slate-950 border border-slate-800/90 text-xs shadow-md">
+                <div className="p-3.5 rounded-2xl rounded-tl-sm bg-slate-950 border border-slate-800/90 text-xs shadow-md space-y-2">
                   <MarkdownRenderer content={msg.content} showCopyButton={false} size="compact" />
+                  {msg.content.includes("API Key Required") && onOpenCredentialsModal && (
+                    <button
+                      onClick={onOpenCredentialsModal}
+                      className="mt-2 w-full py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition flex items-center justify-center space-x-1.5 shadow-md shadow-indigo-600/20"
+                    >
+                      <Zap className="w-3.5 h-3.5" />
+                      <span>Open Credentials & BYOK Hub</span>
+                    </button>
+                  )}
                 </div>
               </div>
             )}
