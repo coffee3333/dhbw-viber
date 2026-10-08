@@ -1,16 +1,43 @@
 import base64
+import ipaddress
+import re
+import socket
 from typing import Any
 import httpx
 from app.core.logger import get_logger
 
 logger = get_logger("meeting_agent.jira_client")
 
+JIRA_DOMAIN_REGEX = re.compile(
+    r"^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$"
+)
+
+
+def validate_jira_domain(domain: str) -> str:
+    """Validate Jira domain to prevent SSRF against internal cluster services or metadata APIs."""
+    clean_domain = re.sub(r"^https?://", "", domain.strip()).rstrip("/").split("/")[0].split(":")[0]
+    if not JIRA_DOMAIN_REGEX.match(clean_domain):
+        raise ValueError(f"Invalid Jira domain format: {domain}")
+
+    # DNS check to block private IP ranges and cloud metadata
+    try:
+        addr_info = socket.getaddrinfo(clean_domain, 443, proto=socket.IPPROTO_TCP)
+        for entry in addr_info:
+            ip_str = entry[4][0]
+            ip_obj = ipaddress.ip_address(ip_str)
+            if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local or ip_obj.is_reserved or ip_obj.is_multicast:
+                raise ValueError(f"Target domain resolves to forbidden private or link-local address: {ip_str}")
+    except socket.gaierror as e:
+        raise ValueError(f"Could not resolve Jira domain: {e}") from e
+
+    return clean_domain
+
 
 class JiraClient:
     """Async Jira REST & Agile API client."""
 
     def __init__(self, domain: str, email: str, api_token: str):
-        self.domain = domain.replace("https://", "").replace("http://", "").strip().rstrip("/")
+        self.domain = validate_jira_domain(domain)
         email = email.strip()
         api_token = api_token.strip()
         self.base_url = f"https://{self.domain}/rest"

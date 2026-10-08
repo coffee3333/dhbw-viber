@@ -22,7 +22,7 @@ data:
   DEBUG: "false"
   HOST: "0.0.0.0"
   PORT: "8000"
-  ALLOWED_ORIGINS: "*"
+  ALLOWED_ORIGINS: "https://dhbw-viber.atai.site,http://localhost:5173"
   TRANSCRIPTION_ENGINE: "gemini"
   SUMMARIZATION_ENGINE: "gemini"
   GEMINI_MODEL: "gemini-2.0-flash"
@@ -66,10 +66,22 @@ spec:
       labels:
         app: backend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: backend
         image: ghcr.io/coffee3333/meeting-agent-backend:latest
         imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
         ports:
         - name: http
           containerPort: 8000

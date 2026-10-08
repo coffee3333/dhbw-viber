@@ -137,12 +137,19 @@ class StudyAgentService:
             updated_summary_markdown: The complete new markdown summary to save.
             change_description: A brief explanation of the modifications made.
             """
-            target_id = target_lecture_id or effective_lecture_id
+            # Security: enforce editing only the currently active lecture context to defeat cross-lecture injection
+            if not effective_lecture_id:
+                return "Error: Cannot update summary when no active lecture context is selected."
+            if target_lecture_id and target_lecture_id != effective_lecture_id:
+                return f"Error: Security violation - attempting to edit lecture '{target_lecture_id}' while active in '{effective_lecture_id}'."
+            target_id = effective_lecture_id
             target_lec = db.query(LectureDB).filter(LectureDB.id == target_id).first()
             if not target_lec:
                 return f"Error: Lecture with ID '{target_id}' not found."
 
             clean_md = updated_summary_markdown.strip()
+            if len(clean_md) < 20:
+                return "Error: Summary update rejected because content is too short or empty."
             target_lec.ai_summary_override = clean_md
 
             # Also update associated meeting if exists
@@ -322,6 +329,7 @@ class StudyAgentService:
 ========================================
 """
 
+        notes_ctx = f'STUDENT NOTES CONTEXT:\n"""{student_notes}"""\n' if student_notes else ''
         if scope == "lecture":
             return f"""You are the dedicated Academic AI Tutor and Pair Programmer for the lecture:
 "{lecture_title or 'Current Lecture'}" in {subject_name}.
@@ -337,7 +345,7 @@ YOUR CAPABILITIES & TOOLS:
    - If the student types `/grill me` or asks for practice questions, use `grill_me` to challenge them on real course concepts.
    - When the student replies with their answer, use `evaluate_student_answer` to grade them accurately out of 10 points.
 
-{f'STUDENT NOTES CONTEXT:\n"""{student_notes}"""\n' if student_notes else ''}
+{notes_ctx}
 COMMUNICATION STYLE:
 - Professional, supportive, highly technical, and concise.
 - Format responses with GitHub Markdown, code blocks with syntax highlighting, bullet points, and clear bold headings.

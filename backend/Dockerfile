@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Production Dockerfile for MeetingAgent AI using Astral uv
+# Production Dockerfile for MeetingAgent AI using Astral uv with non-root security
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 # Set environment variables
@@ -20,6 +20,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
+# Create dedicated non-root user and group
+RUN groupadd -g 10001 appuser && \
+    useradd -u 10001 -g appuser -s /bin/bash -m appuser
+
 # Copy dependency specifications first to leverage Docker layer caching
 COPY pyproject.toml uv.lock .python-version ./
 
@@ -30,8 +34,13 @@ RUN uv sync --frozen --no-dev --no-cache
 COPY app/ ./app/
 COPY main.py ./
 
-# Create data directory for SQLite database and recordings
-RUN mkdir -p /app/data/recordings && chmod -R 777 /app/data
+# Create data directories and establish secure non-root ownership
+RUN mkdir -p /app/data/recordings /app/data/materials /app/data/logs /app/data/tmp_repos && \
+    chown -R appuser:appuser /app && \
+    chmod 750 /app/data
+
+# Switch to unprivileged user
+USER 10001
 
 # Declare volume for data persistence
 VOLUME ["/app/data"]

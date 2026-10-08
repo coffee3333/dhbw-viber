@@ -679,7 +679,7 @@ async def delete_project(
 async def list_project_members(
     project_id: str,
     db: Session = Depends(get_db),
-    _: UserDB | None = Depends(get_current_user_optional),
+    current_user: UserDB | None = Depends(get_current_user_optional),
 ):
     """List all members assigned to this project, auto-syncing from Jira API if available."""
     proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
@@ -789,7 +789,11 @@ async def list_project_members(
                 git_author_name=creds.git_author_name if creds else None,
                 git_author_email=creds.git_author_email if creds else None,
                 has_github_token=bool(creds and creds.github_token_encrypted),
-                telegram_chat_id=user.telegram_chat_id,
+                telegram_chat_id=(
+                    user.telegram_chat_id
+                    if (current_user and (current_user.role == "admin" or current_user.id == user.id))
+                    else None
+                ),
             )
         )
     return results
@@ -1631,14 +1635,8 @@ async def create_task(
 
     assignee_id = data.assignee_id
     if not assignee_id:
-        atai_member = (
-            db.query(ProjectMemberDB)
-            .join(UserDB, ProjectMemberDB.user_id == UserDB.id)
-            .filter(ProjectMemberDB.project_id == sprint.project_id, UserDB.display_name.ilike("%Atai%"))
-            .first()
-        )
-        if atai_member:
-            assignee_id = atai_member.user_id
+        if current_user:
+            assignee_id = current_user.id
         else:
             first_m = db.query(ProjectMemberDB).filter(ProjectMemberDB.project_id == sprint.project_id).first()
             if first_m:
@@ -1695,14 +1693,14 @@ async def create_task(
                     if creds and creds.jira_account_id:
                         jira_assignee_id = creds.jira_account_id
                 if not jira_assignee_id:
-                    atai_creds = (
+                    member_cred = (
                         db.query(UserCredentialsDB)
-                        .join(UserDB, UserCredentialsDB.user_id == UserDB.id)
-                        .filter(UserCredentialsDB.jira_account_id.isnot(None), UserDB.display_name.ilike("%Atai%"))
+                        .join(ProjectMemberDB, ProjectMemberDB.user_id == UserCredentialsDB.user_id)
+                        .filter(ProjectMemberDB.project_id == sprint.project_id, UserCredentialsDB.jira_account_id.isnot(None))
                         .first()
                     )
-                    if atai_creds and atai_creds.jira_account_id:
-                        jira_assignee_id = atai_creds.jira_account_id
+                    if member_cred and member_cred.jira_account_id:
+                        jira_assignee_id = member_cred.jira_account_id
 
                 key = await jira.create_issue(
                     project_key=proj.jira_project_key or "KAN",
@@ -2050,15 +2048,15 @@ async def trigger_task_create_manual(
     assignee_id = None
     if task.assignee and task.assignee.credentials:
         assignee_id = task.assignee.credentials.jira_account_id
-    if not assignee_id:
-        atai_creds = (
+    if not assignee_id and sprint:
+        member_cred = (
             db.query(UserCredentialsDB)
-            .join(UserDB, UserCredentialsDB.user_id == UserDB.id)
-            .filter(UserCredentialsDB.jira_account_id.isnot(None), UserDB.display_name.ilike("%Atai%"))
+            .join(ProjectMemberDB, ProjectMemberDB.user_id == UserCredentialsDB.user_id)
+            .filter(ProjectMemberDB.project_id == sprint.project_id, UserCredentialsDB.jira_account_id.isnot(None))
             .first()
         )
-        if atai_creds and atai_creds.jira_account_id:
-            assignee_id = atai_creds.jira_account_id
+        if member_cred and member_cred.jira_account_id:
+            assignee_id = member_cred.jira_account_id
 
     try:
         key = await jira.create_issue(
@@ -2578,14 +2576,14 @@ async def agent_execute_plan(
             jira_assignee_id = current_user.credentials.jira_account_id
 
         if not jira_assignee_id:
-            atai_creds = (
+            member_cred = (
                 db.query(UserCredentialsDB)
-                .join(UserDB, UserCredentialsDB.user_id == UserDB.id)
-                .filter(UserCredentialsDB.jira_account_id.isnot(None), UserDB.display_name.ilike("%Atai%"))
+                .join(ProjectMemberDB, ProjectMemberDB.user_id == UserCredentialsDB.user_id)
+                .filter(ProjectMemberDB.project_id == project.id, UserCredentialsDB.jira_account_id.isnot(None))
                 .first()
             )
-            if atai_creds:
-                jira_assignee_id = atai_creds.jira_account_id
+            if member_cred:
+                jira_assignee_id = member_cred.jira_account_id
 
         orig_est = str(t_data.get("original_estimate") or t_data.get("estimate_time") or "").strip() or None
         act_time = str(t_data.get("time_spent") or t_data.get("actual_time") or "").strip() or None

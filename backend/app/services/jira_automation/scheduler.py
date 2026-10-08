@@ -174,14 +174,14 @@ async def execute_sprint_start(
                 if creds and creds.jira_account_id:
                     assignee_id = creds.jira_account_id
             if not assignee_id:
-                atai_creds = (
+                fallback_cred = (
                     db.query(UserCredentialsDB)
-                    .join(UserDB, UserCredentialsDB.user_id == UserDB.id)
-                    .filter(UserCredentialsDB.jira_account_id.isnot(None), UserDB.display_name.ilike("%Atai%"))
+                    .join(ProjectMemberDB, ProjectMemberDB.user_id == UserCredentialsDB.user_id)
+                    .filter(ProjectMemberDB.project_id == project.id, UserCredentialsDB.jira_account_id.isnot(None))
                     .first()
                 )
-                if atai_creds and atai_creds.jira_account_id:
-                    assignee_id = atai_creds.jira_account_id
+                if fallback_cred and fallback_cred.jira_account_id:
+                    assignee_id = fallback_cred.jira_account_id
 
             key = await jira.create_issue(
                 project_key=project.jira_project_key or "KAN",
@@ -355,14 +355,14 @@ async def process_moves(db: Session, project: AutomationProjectDB, jira: JiraCli
                         if creds and creds.jira_account_id:
                             assignee_id = creds.jira_account_id
                     if not assignee_id:
-                        atai_creds = (
+                        fallback_cred = (
                             db.query(UserCredentialsDB)
-                            .join(UserDB, UserCredentialsDB.user_id == UserDB.id)
-                            .filter(UserCredentialsDB.jira_account_id.isnot(None), UserDB.display_name.ilike("%Atai%"))
+                            .join(ProjectMemberDB, ProjectMemberDB.user_id == UserCredentialsDB.user_id)
+                            .filter(ProjectMemberDB.project_id == project.id, UserCredentialsDB.jira_account_id.isnot(None))
                             .first()
                         )
-                        if atai_creds and atai_creds.jira_account_id:
-                            assignee_id = atai_creds.jira_account_id
+                        if fallback_cred and fallback_cred.jira_account_id:
+                            assignee_id = fallback_cred.jira_account_id
 
                     key = await jira.create_issue(
                         project_key=project.jira_project_key or "KAN",

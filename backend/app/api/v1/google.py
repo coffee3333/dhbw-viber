@@ -1,7 +1,10 @@
+import hashlib
+import hmac
+import secrets
 from datetime import datetime
 from typing import Any
 from uuid import uuid4
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -57,24 +60,54 @@ def get_google_status(db: Session = Depends(get_db)):
     }
 
 
-@router.get("/login")
-def google_login():
+@router.get("/login", dependencies=[Depends(require_admin)])
+def google_login(response: Response):
+    """Initiates Google OAuth flow with cryptographic HMAC-signed state parameter."""
     try:
-        auth_url = generate_auth_url()
+        settings = get_settings()
+        state_val = secrets.token_urlsafe(32)
+        signature = hmac.new(settings.secret_key.encode("utf-8"), state_val.encode("utf-8"), hashlib.sha256).hexdigest()
+        cookie_val = f"{state_val}.{signature}"
+
+        response.set_cookie(
+            key="google_oauth_state",
+            value=cookie_val,
+            httponly=True,
+            samesite="lax",
+            secure=not settings.debug,
+            max_age=600,
+            path="/"
+        )
+        auth_url = generate_auth_url(state=state_val)
         return {"auth_url": auth_url}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-@router.get("/oauth2callback")
+@router.get("/oauth2callback", dependencies=[Depends(require_admin)])
 def google_oauth_callback(
+    request: Request,
     code: str = Query(...),
-    state: str = Query(None),
+    state: str = Query(...),
     db: Session = Depends(get_db),
 ):
+    """Completes Google OAuth flow after validating cryptographic CSRF state token."""
+    cookie_val = request.cookies.get("google_oauth_state")
+    if not cookie_val or "." not in cookie_val:
+        raise HTTPException(status_code=400, detail="Missing or invalid OAuth state cookie. Please try logging in again.")
+
+    val, sig = cookie_val.split(".", 1)
+    settings = get_settings()
+    expected_sig = hmac.new(settings.secret_key.encode("utf-8"), val.encode("utf-8"), hashlib.sha256).hexdigest()
+
+    if not secrets.compare_digest(sig, expected_sig) or not secrets.compare_digest(val, state):
+        raise HTTPException(status_code=400, detail="OAuth state verification failed. Possible CSRF attack detected.")
+
     try:
         exchange_code_and_store(db, code, state=state)
-        return RedirectResponse(url="/?google_connected=true")
+        res = RedirectResponse(url="/?google_connected=true")
+        res.delete_cookie("google_oauth_state", path="/")
+        return res
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Authentication error: {e}") from e
 

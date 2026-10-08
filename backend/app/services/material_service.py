@@ -88,19 +88,49 @@ def detect_material_type(filename: str, explicit_type: str | None = None) -> str
     return "material"
 
 
+MAX_MATERIAL_BYTES = 50 * 1024 * 1024  # 50 MB
+ALLOWED_MATERIAL_EXTENSIONS = {".pdf", ".pptx", ".ppt", ".md", ".txt", ".docx", ".doc"}
+
+
 def save_lecture_material_file(lecture_id: str, file: UploadFile, explicit_type: str | None = None) -> dict[str, Any]:
-    """Save an uploaded file for a lecture and extract its text."""
-    target_dir = MATERIALS_DIR / lecture_id
+    """Save an uploaded file for a lecture with streaming chunking and size limits to prevent OOM."""
+    original_name = Path(file.filename or "uploaded_material").name
+    suffix = Path(original_name).suffix.lower()
+
+    if suffix not in ALLOWED_MATERIAL_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File extension '{suffix}' not allowed. Permitted formats: {', '.join(sorted(ALLOWED_MATERIAL_EXTENSIONS))}"
+        )
+
+    target_dir = (MATERIALS_DIR / lecture_id).resolve()
+    if not target_dir.is_relative_to(MATERIALS_DIR.resolve()):
+        raise HTTPException(status_code=400, detail="Invalid lecture identifier")
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    original_name = file.filename or "uploaded_material"
     unique_id = uuid.uuid4().hex[:8]
-    safe_name = f"{unique_id}_{Path(original_name).name}"
+    safe_name = f"{unique_id}_{original_name}"
     saved_path = target_dir / safe_name
 
-    # Write file content
-    with open(saved_path, "wb") as f:
-        f.write(file.file.read())
+    total_bytes = 0
+    chunk_size = 1024 * 1024  # 1MB chunks
+    try:
+        with open(saved_path, "wb") as f:
+            while chunk := file.file.read(chunk_size):
+                total_bytes += len(chunk)
+                if total_bytes > MAX_MATERIAL_BYTES:
+                    saved_path.unlink(missing_ok=True)
+                    raise HTTPException(
+                        status_code=413,
+                        detail="File exceeds maximum allowed size limit of 50 MB"
+                    )
+                f.write(chunk)
+    except HTTPException:
+        saved_path.unlink(missing_ok=True)
+        raise
+    except Exception as e:
+        saved_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=500, detail=f"Failed to save upload: {e}") from e
 
     mat_type = detect_material_type(original_name, explicit_type)
     extracted_text = extract_text_from_file(saved_path)
@@ -278,13 +308,15 @@ Provide a clean, structured Markdown table with formal definitions and impacts:
 Provide 2–4 realistic exam-grade questions (conceptual, case analysis, or design) with complete, step-by-step model answers.
 """
 
+    notes_block = f"*** STUDENT NOTES & DIRECTIVES (PRIORITIZE STRICTLY) ***:\n{student_notes}\n" if student_notes else ""
+    custom_block = f"Additional User Instructions: {custom_instructions}\n" if custom_instructions else ""
+
     user_prompt = f"""Lecture Details:
 Subject: {subject_name}
 Title: {lec.title}
 Date / Time: {lec.start_time.strftime('%Y-%m-%d %H:%M')} - {lec.end_time.strftime('%H:%M')}
-{f"*** STUDENT NOTES & DIRECTIVES (PRIORITIZE STRICTLY) ***:\n{student_notes}\n" if student_notes else ""}
-{f"Additional User Instructions: {custom_instructions}\n" if custom_instructions else ""}
-
+{notes_block}
+{custom_block}
 AVAILABLE LECTURE ASSETS & CONTEXT:
 {full_prompt_context}
 
