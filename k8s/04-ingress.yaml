@@ -25,8 +25,6 @@ metadata:
   namespace: dhbw-viber
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
-    traefik.ingress.kubernetes.io/router.entrypoints: websecure
-    traefik.ingress.kubernetes.io/router.tls: "true"
     traefik.ingress.kubernetes.io/router.middlewares: dhbw-viber-upload-limit@kubernetescrd
 spec:
   ingressClassName: traefik
