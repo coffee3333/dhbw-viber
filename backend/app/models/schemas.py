@@ -108,6 +108,27 @@ class SubjectUpdateSchema(BaseModel):
     semester: str | None = None
 
 
+class LectureCreateSchema(BaseModel):
+    subject_id: str
+    title: str
+    start_time: datetime
+    end_time: datetime
+    room: str | None = None
+    meeting_link: str | None = None
+    description: str | None = None
+    status: str | None = "scheduled"
+
+
+class LectureUpdateSchema(BaseModel):
+    title: str | None = None
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    room: str | None = None
+    meeting_link: str | None = None
+    description: str | None = None
+    status: str | None = None
+
+
 class LectureSchema(BaseModel):
     id: str
     subject_id: str

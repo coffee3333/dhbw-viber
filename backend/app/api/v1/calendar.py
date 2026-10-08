@@ -24,9 +24,11 @@ from app.models.schemas import (
     CalendarSourceSchema,
     CalendarSyncRequestSchema,
     LectureChainItemSchema,
+    LectureCreateSchema,
     LectureMaterialCreate,
     LectureNotesUpdate,
     LectureStatusUpdate,
+    LectureUpdateSchema,
     SubjectCreateSchema,
     SubjectDetailSchema,
     SubjectSchema,
@@ -460,6 +462,137 @@ def delete_subject(subject_id: str, db: Session = Depends(get_db)):
     return {"message": f"Subject '{subject.name}' and its lectures deleted successfully."}
 
 
+@router.post("/lectures", response_model=LectureChainItemSchema, dependencies=[Depends(require_auth)])
+def create_lecture(
+    payload: LectureCreateSchema,
+    db: Session = Depends(get_db)
+):
+    """Create a new class/lecture slot for a subject."""
+    subj = db.query(SubjectDB).filter(SubjectDB.id == payload.subject_id).first()
+    if not subj:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    if not payload.title or not payload.title.strip():
+        raise HTTPException(status_code=400, detail="Class title cannot be empty")
+
+    lec_id = f"lec_{uuid.uuid4().hex[:12]}"
+    start_dt = payload.start_time.replace(tzinfo=None) if payload.start_time.tzinfo else payload.start_time
+    end_dt = payload.end_time.replace(tzinfo=None) if payload.end_time.tzinfo else payload.end_time
+
+    lecture = LectureDB(
+        id=lec_id,
+        subject_id=payload.subject_id,
+        title=payload.title.strip(),
+        start_time=start_dt,
+        end_time=end_dt,
+        room=payload.room.strip() if payload.room else None,
+        meeting_link=payload.meeting_link.strip() if payload.meeting_link else None,
+        description=payload.description.strip() if payload.description else None,
+        status=payload.status or "scheduled",
+    )
+    db.add(lecture)
+    db.commit()
+    db.refresh(lecture)
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    return LectureChainItemSchema(
+        id=lecture.id,
+        sequence=len(subj.lectures),
+        title=lecture.title,
+        start_time=lecture.start_time.isoformat(),
+        end_time=lecture.end_time.isoformat(),
+        room=lecture.room,
+        meeting_link=lecture.meeting_link,
+        description=lecture.description,
+        status=lecture.status,
+        has_recording=False,
+        has_summary=False,
+        has_materials=False,
+        has_ai_context=False,
+        is_past=lecture.end_time < now,
+        is_today=lecture.start_time.date() == now.date(),
+        is_upcoming=lecture.start_time > now,
+        is_happening_now=lecture.start_time <= now <= lecture.end_time,
+        notes_preview=None,
+        materials=[],
+        chips=[],
+        incoming_tasks_count=0,
+        assigned_tasks_count=0,
+    )
+
+
+@router.put("/lectures/{lecture_id}", response_model=LectureChainItemSchema, dependencies=[Depends(require_auth)])
+def update_lecture(
+    lecture_id: str,
+    payload: LectureUpdateSchema,
+    db: Session = Depends(get_db)
+):
+    """Update a class/lecture slot."""
+    lecture = db.query(LectureDB).filter(LectureDB.id == lecture_id).first()
+    if not lecture:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    if payload.title is not None and payload.title.strip():
+        lecture.title = payload.title.strip()
+    if payload.start_time is not None:
+        lecture.start_time = payload.start_time.replace(tzinfo=None) if payload.start_time.tzinfo else payload.start_time
+    if payload.end_time is not None:
+        lecture.end_time = payload.end_time.replace(tzinfo=None) if payload.end_time.tzinfo else payload.end_time
+    if payload.room is not None:
+        lecture.room = payload.room.strip() if payload.room else None
+    if payload.meeting_link is not None:
+        lecture.meeting_link = payload.meeting_link.strip() if payload.meeting_link else None
+    if payload.description is not None:
+        lecture.description = payload.description.strip() if payload.description else None
+    if payload.status is not None:
+        lecture.status = payload.status
+
+    db.commit()
+    db.refresh(lecture)
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    return LectureChainItemSchema(
+        id=lecture.id,
+        sequence=1,
+        title=lecture.title,
+        start_time=lecture.start_time.isoformat(),
+        end_time=lecture.end_time.isoformat(),
+        room=lecture.room,
+        meeting_link=lecture.meeting_link,
+        description=lecture.description,
+        status=lecture.status,
+        has_recording=any(m.status == "ready" for m in lecture.meetings),
+        has_summary=bool(lecture.ai_summary_override or any(m.summary_json for m in lecture.meetings)),
+        has_materials=len(lecture.materials) > 0,
+        has_ai_context=bool(lecture.ai_summary_override),
+        is_past=lecture.end_time < now,
+        is_today=lecture.start_time.date() == now.date(),
+        is_upcoming=lecture.start_time > now,
+        is_happening_now=lecture.start_time <= now <= lecture.end_time,
+        notes_preview=lecture.notes[:120] if lecture.notes else None,
+        materials=lecture.materials,
+        chips=[],
+        incoming_tasks_count=0,
+        assigned_tasks_count=0,
+    )
+
+
+@router.delete("/lectures/{lecture_id}", dependencies=[Depends(require_auth)])
+def delete_lecture(lecture_id: str, db: Session = Depends(get_db)):
+    """Delete a class/lecture slot."""
+    lecture = db.query(LectureDB).filter(LectureDB.id == lecture_id).first()
+    if not lecture:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    for m in lecture.meetings:
+        m.lecture_id = None
+    db.flush()
+
+    db.delete(lecture)
+    db.commit()
+    return {"message": f"Class '{lecture.title}' deleted successfully."}
+
+
 @router.get("/lectures")
 def get_lectures_for_calendar(
     start: str | None = None,
@@ -718,7 +851,7 @@ def toggle_lecture_action_item(lecture_id: str, item_id: int, db: Session = Depe
 
 
 
-@router.patch("/lectures/{lecture_id}/status", dependencies=[Depends(require_admin)])
+@router.patch("/lectures/{lecture_id}/status", dependencies=[Depends(require_auth)])
 def update_lecture_status(lecture_id: str, payload: LectureStatusUpdate, db: Session = Depends(get_db)):
     lec = db.query(LectureDB).filter(LectureDB.id == lecture_id).first()
     if not lec:
@@ -728,7 +861,7 @@ def update_lecture_status(lecture_id: str, payload: LectureStatusUpdate, db: Ses
     return {"message": "Status updated", "status": lec.status}
 
 
-@router.patch("/lectures/{lecture_id}/notes", dependencies=[Depends(require_admin)])
+@router.patch("/lectures/{lecture_id}/notes", dependencies=[Depends(require_auth)])
 def update_lecture_notes(lecture_id: str, payload: LectureNotesUpdate, db: Session = Depends(get_db)):
     lec = db.query(LectureDB).filter(LectureDB.id == lecture_id).first()
     if not lec:
@@ -740,7 +873,7 @@ def update_lecture_notes(lecture_id: str, payload: LectureNotesUpdate, db: Sessi
     return {"message": "Notes saved", "notes": lec.notes}
 
 
-@router.post("/lectures/{lecture_id}/materials", dependencies=[Depends(require_admin)])
+@router.post("/lectures/{lecture_id}/materials", dependencies=[Depends(require_auth)])
 def add_lecture_material(lecture_id: str, payload: LectureMaterialCreate, db: Session = Depends(get_db)):
     lec = db.query(LectureDB).filter(LectureDB.id == lecture_id).first()
     if not lec:
@@ -762,7 +895,7 @@ def add_lecture_material(lecture_id: str, payload: LectureMaterialCreate, db: Se
     return {"message": "Material added", "material": new_item, "materials": current_materials}
 
 
-@router.delete("/lectures/{lecture_id}/materials/{material_id}", dependencies=[Depends(require_admin)])
+@router.delete("/lectures/{lecture_id}/materials/{material_id}", dependencies=[Depends(require_auth)])
 def delete_lecture_material(lecture_id: str, material_id: str, db: Session = Depends(get_db)):
     lec = db.query(LectureDB).filter(LectureDB.id == lecture_id).first()
     if not lec:
@@ -776,7 +909,7 @@ def delete_lecture_material(lecture_id: str, material_id: str, db: Session = Dep
     return {"message": "Material deleted", "materials": current_materials}
 
 
-@router.post("/lectures/{lecture_id}/materials/upload", dependencies=[Depends(require_admin)])
+@router.post("/lectures/{lecture_id}/materials/upload", dependencies=[Depends(require_auth)])
 def upload_lecture_material(
     lecture_id: str,
     file: UploadFile = File(...),
@@ -830,7 +963,7 @@ def get_material_file(lecture_id: str, filename: str):
     return FileResponse(file_path, filename=filename)
 
 
-@router.post("/lectures/{lecture_id}/generate-summary", dependencies=[Depends(require_admin)])
+@router.post("/lectures/{lecture_id}/generate-summary", dependencies=[Depends(require_auth)])
 def generate_lecture_summary(
     lecture_id: str,
     payload: dict | None = Body(None),
