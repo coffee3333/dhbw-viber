@@ -16,6 +16,7 @@ import {
   FileText,
 } from "lucide-react";
 import { jiraAutomationApi } from "../../api/jiraAutomationApi";
+import { useAuthViewModel } from "../../viewmodels/useAuthViewModel";
 import { showToast } from "../../utils/toast";
 import type { AutomationProject, JiraDiscoveredBoard } from "../../types/jiraAutomation";
 import { JiraAgentGuideModal } from "./JiraAgentGuideModal";
@@ -31,6 +32,7 @@ export const JiraProjectSettings: React.FC<JiraProjectSettingsProps> = ({
   onRefreshProject,
   onClose,
 }) => {
+  const { credentials, updateCredentials } = useAuthViewModel();
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description || "");
 
@@ -41,6 +43,13 @@ export const JiraProjectSettings: React.FC<JiraProjectSettingsProps> = ({
   const [showJiraToken, setShowJiraToken] = useState(false);
   const [jiraKey, setJiraKey] = useState(project.jira_project_key || "");
   const [jiraBoardId, setJiraBoardId] = useState(project.jira_board_id?.toString() || "");
+  const [jiraAccountId, setJiraAccountId] = useState(credentials?.jira_account_id || "");
+
+  useEffect(() => {
+    if (credentials?.jira_account_id !== undefined) {
+      setJiraAccountId(credentials.jira_account_id || "");
+    }
+  }, [credentials?.jira_account_id]);
 
   // Discovered Boards state
   const [discoveredBoards, setDiscoveredBoards] = useState<JiraDiscoveredBoard[]>([]);
@@ -125,8 +134,14 @@ export const JiraProjectSettings: React.FC<JiraProjectSettingsProps> = ({
         jira_board_id: jiraBoardId ? parseInt(jiraBoardId) : undefined,
       });
 
+      if (jiraAccountId !== (credentials?.jira_account_id || "")) {
+        await updateCredentials({
+          jira_account_id: jiraAccountId.trim() || undefined,
+        });
+      }
+
       setJiraToken("");
-      showToast.success("Settings Saved", "Project configurations updated.");
+      showToast.success("Settings Saved", "Project and Jira account configurations updated.");
       onRefreshProject();
     } catch (err: any) {
       showToast.error("Failed to save settings", err.message);
@@ -331,6 +346,27 @@ export const JiraProjectSettings: React.FC<JiraProjectSettingsProps> = ({
                   className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-100"
                 />
               </div>
+            </div>
+
+            <div className="space-y-1 md:col-span-2 pt-1 border-t border-slate-800/60">
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-slate-400">Personal Jira Account ID (Atlassian User ID)</label>
+                {credentials?.jira_account_id ? (
+                  <span className="text-[10px] text-emerald-400">Configured</span>
+                ) : (
+                  <span className="text-[10px] text-slate-500">Optional</span>
+                )}
+              </div>
+              <input
+                type="text"
+                value={jiraAccountId}
+                onChange={(e) => setJiraAccountId(e.target.value)}
+                placeholder="e.g. 712020:e8b0a19f-784e-4a24-be77-4c602fd11c73"
+                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-100 font-mono"
+              />
+              <p className="text-[10px] text-slate-500">
+                Maps your personal user profile to Jira Cloud for sprint ticket assignments and AI task planning.
+              </p>
             </div>
           </div>
 

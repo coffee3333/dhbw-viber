@@ -17,7 +17,6 @@ import {
   Sparkles,
   Upload,
   FolderPlus,
-  CheckCircle2,
 } from "lucide-react";
 import { useAuthViewModel } from "../viewmodels/useAuthViewModel";
 import { useCalendarViewModel } from "../viewmodels/useCalendarViewModel";
@@ -101,10 +100,6 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
   const [openaiModel, setOpenaiModel] = useState("gpt-4o");
   const [isSavingAI, setIsSavingAI] = useState(false);
 
-  // Jira State
-  const [jiraAccountId, setJiraAccountId] = useState("");
-  const [isSavingJiraId, setIsSavingJiraId] = useState(false);
-
   // Available Projects (if opened globally)
   const [availableProjects, setAvailableProjects] = useState<AutomationProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(project?.id || null);
@@ -153,7 +148,6 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
 
   useEffect(() => {
     if (credentials) {
-      setJiraAccountId(credentials.jira_account_id || "");
       if (credentials.gemini_model) {
         setGeminiModel(credentials.gemini_model);
       }
@@ -274,21 +268,6 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
       showToast.error("Failed to clear key", err.message);
     } finally {
       setIsSavingAI(false);
-    }
-  };
-
-  const handleSaveJiraAccount = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      setIsSavingJiraId(true);
-      await updateCredentials({
-        jira_account_id: jiraAccountId.trim() || undefined,
-      });
-      showToast.success("Jira Account ID Saved", "Your Atlassian user mapping has been updated.");
-    } catch (err: any) {
-      showToast.error("Failed to save Jira ID", err.response?.data?.detail || err.message);
-    } finally {
-      setIsSavingJiraId(false);
     }
   };
 
@@ -800,50 +779,7 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
           {/* TAB 3: Jira Integration */}
           {(activeTab === "jira" || activeTab === "project" || activeTab === "developer_tools") && (
             <div className="space-y-6 w-full">
-              {/* 1. Personal Jira Account Mapping */}
-              <form onSubmit={handleSaveJiraAccount} className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-7 h-7 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold">
-                      <Plug className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-white">Jira Account ID (Atlassian User ID)</h4>
-                      <p className="text-[10px] text-slate-400">Maps your user profile to Jira Cloud for sprint task assignments and ticket automation</p>
-                    </div>
-                  </div>
-                  {credentials?.jira_account_id ? (
-                    <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center space-x-1">
-                      <CheckCircle2 className="w-3 h-3" />
-                      <span>Configured</span>
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-amber-400 bg-amber-950/60 border border-amber-500/30 px-2 py-0.5 rounded-full">
-                      Not Set
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="text"
-                    value={jiraAccountId}
-                    onChange={(e) => setJiraAccountId(e.target.value)}
-                    placeholder="e.g. 712020:e8b0a19f-784e-4a24-be77-4c602fd11c73"
-                    className="flex-1 px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-indigo-500 font-mono"
-                  />
-                  <button
-                    type="submit"
-                    disabled={isSavingJiraId}
-                    className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md shadow-indigo-600/30 transition cursor-pointer flex-shrink-0"
-                  >
-                    <Save className="w-3.5 h-3.5" />
-                    <span>{isSavingJiraId ? "Saving..." : "Save ID"}</span>
-                  </button>
-                </div>
-              </form>
-
-              {/* 2. Jira Cloud Workspace & Projects Configuration */}
+              {/* Jira Cloud Workspace & Projects Configuration */}
               <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
