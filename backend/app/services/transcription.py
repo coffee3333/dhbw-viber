@@ -87,6 +87,7 @@ Return a valid JSON object strictly matching this schema:
   ],
   "full_text": "[00:00] Speaker 1: Exact words..."
 }}
+Output only the raw JSON, no markdown code fence."""
 
     from app.core.ai_credentials import normalize_gemini_model
 
