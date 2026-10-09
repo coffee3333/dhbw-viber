@@ -46,9 +46,42 @@ export const JiraPlannerChat: React.FC<JiraPlannerChatProps> = ({
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [executingPlanId, setExecutingPlanId] = useState<string | null>(null);
+  const [panelWidth, setPanelWidth] = useState<number>(440);
+  const [isResizing, setIsResizing] = useState<boolean>(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const startResizing = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      const newWidth = window.innerWidth - e.clientX;
+      if (newWidth >= 300 && newWidth <= 750) {
+        setPanelWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      if (isResizing) {
+        setIsResizing(false);
+      }
+    };
+
+    if (isResizing) {
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+    }
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizing]);
 
   const storageKey = `jira_planner_chat_${projectId}`;
 
@@ -206,7 +239,17 @@ export const JiraPlannerChat: React.FC<JiraPlannerChatProps> = ({
 
   // 2. Open side drawer
   return (
-    <aside className="fixed right-0 top-0 bottom-0 w-[440px] max-w-full bg-[#0f172a] border-l border-slate-800 shadow-2xl z-50 flex flex-col text-slate-100">
+    <aside
+      style={{ width: `${panelWidth}px` }}
+      className="fixed right-0 top-0 bottom-0 max-w-full bg-[#0f172a] border-l border-slate-800 shadow-2xl z-50 flex flex-col text-slate-100 select-text transition-all duration-75"
+    >
+      {/* Resizing Handle on the left edge */}
+      <div
+        onMouseDown={startResizing}
+        className="absolute top-0 bottom-0 -left-1 w-2 cursor-ew-resize hover:bg-indigo-500/50 transition z-40"
+        title="Drag to resize panel"
+      />
+
       {/* Header */}
       <div className="p-4 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between">
         <div className="flex items-center space-x-2.5">
@@ -305,13 +348,13 @@ export const JiraPlannerChat: React.FC<JiraPlannerChatProps> = ({
               }`}
             >
               <div
-                className={`max-w-[90%] rounded-2xl p-3 text-xs leading-relaxed ${
+                className={`max-w-[90%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed ${
                   msg.role === "user"
                     ? "bg-indigo-600 text-white rounded-br-none"
                     : "bg-slate-900 border border-slate-800 text-slate-200 rounded-bl-none shadow-md"
                 }`}
               >
-                <MarkdownRenderer content={msg.content} />
+                <MarkdownRenderer content={msg.content} size="compact" />
               </div>
 
               {/* Proposed Plan Card (Review Mode) */}

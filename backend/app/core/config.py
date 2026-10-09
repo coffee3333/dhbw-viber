@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     summarization_engine: str = "gemini"
 
     # Model specifications
-    gemini_model: str = "gemini-3.8-flash"
+    gemini_model: str = "gemini-flash-lite"
     openai_model: str = "gpt-4o"
     whisper_local_model: str = "base"
 

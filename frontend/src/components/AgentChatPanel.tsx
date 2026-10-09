@@ -46,7 +46,8 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
   const [panelWidth, setPanelWidth] = useState<number>(380);
   const [isResizing, setIsResizing] = useState<boolean>(false);
   const [tokenSaver, setTokenSaver] = useState<boolean>(() => {
-    return localStorage.getItem("meeting_agent_token_saver") === "true";
+    const saved = localStorage.getItem("meeting_agent_token_saver");
+    return saved !== null ? saved === "true" : true;
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -327,24 +328,6 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
                   ? "I have full access to your lecture slides, transcript, summaries, and notes. Ask questions, update your summary, or type /grill me to practice!"
                   : "I can search all lectures, slides, and summaries across the entire course. Ask about any topic, compare lectures, or practice exam questions."}
               </p>
-            </div>
-
-            {/* Starter Chips */}
-            <div className="grid grid-cols-2 gap-2 pt-2 text-left">
-              {quickActionPrompts.map((q, i) => (
-                <button
-                  key={i}
-                  onClick={() => handleSendMessage(q.prompt)}
-                  className="p-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-slate-800 hover:border-indigo-500/40 text-left transition group"
-                >
-                  <span className="text-[11px] font-semibold text-slate-200 group-hover:text-indigo-300 block truncate">
-                    {q.label}
-                  </span>
-                  <span className="text-[9px] text-slate-500 block truncate">
-                    {q.prompt}
-                  </span>
-                </button>
-              ))}
             </div>
           </div>
         )}
