@@ -25,7 +25,7 @@ class ResolvedAIConfig:
 
 def normalize_gemini_model(model: str | None) -> str:
     if not model:
-        return "gemini-2.5-flash"
+        return "gemini-3.8-flash"
     m = model.strip()
     if m in (
         "gemini-2.0-flash",
@@ -38,8 +38,10 @@ def normalize_gemini_model(model: str | None) -> str:
         "gemini-1.5-flash-002",
         "gemini-flash-latest",
         "gemini-2.5-flash",
+        "gemini-2.5-flash-latest",
+        "gemini-3.8-flash",
     ):
-        return "gemini-2.5-flash"
+        return "gemini-3.8-flash"
     if m in (
         "gemini-2.0-pro",
         "gemini-2.0-pro-exp",
@@ -49,8 +51,9 @@ def normalize_gemini_model(model: str | None) -> str:
         "gemini-1.5-pro-002",
         "gemini-pro-latest",
         "gemini-2.5-pro",
+        "gemini-3.8-pro",
     ):
-        return "gemini-2.5-pro"
+        return "gemini-3.8-pro"
     return m
 
 

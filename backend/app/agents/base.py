@@ -5,7 +5,7 @@ import re
 class BaseAgent:
     """Base class for agentic AI components."""
 
-    def __init__(self, engine: str = "gemini", api_key: str | None = None, model: str = "gemini-2.5-flash"):
+    def __init__(self, engine: str = "gemini", api_key: str | None = None, model: str = "gemini-3.8-flash"):
         self.engine = engine
         self.api_key = api_key
         self.model = model
