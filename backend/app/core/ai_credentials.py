@@ -23,6 +23,35 @@ class ResolvedAIConfig:
     has_custom_keys: bool
 
 
+def normalize_gemini_model(model: str | None) -> str:
+    if not model:
+        return "gemini-flash-latest"
+    m = model.strip()
+    if m in (
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-exp",
+        "gemini-2.0-flash-001",
+        "gemini-2.0-flash-preview",
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-flash-001",
+        "gemini-1.5-flash-002",
+        "gemini-2.5-flash",
+    ):
+        return "gemini-flash-latest"
+    if m in (
+        "gemini-2.0-pro",
+        "gemini-2.0-pro-exp",
+        "gemini-1.5-pro",
+        "gemini-1.5-pro-latest",
+        "gemini-1.5-pro-001",
+        "gemini-1.5-pro-002",
+        "gemini-2.5-pro",
+    ):
+        return "gemini-pro-latest"
+    return m
+
+
 def resolve_user_ai_config(user: UserDB | None = None) -> ResolvedAIConfig:
     """
     Resolve effective AI engines, keys, and model parameters for the given user.
@@ -56,13 +85,10 @@ def resolve_user_ai_config(user: UserDB | None = None) -> ResolvedAIConfig:
     )
 
     # Model names
-    gemini_model = (
+    gemini_model = normalize_gemini_model(
         (creds.gemini_model if creds and creds.gemini_model else None)
         or settings.gemini_model
-        or "gemini-flash-latest"
     )
-    if gemini_model in ("gemini-2.5-flash", "gemini-1.5-flash"):
-        gemini_model = "gemini-flash-latest"
 
     openai_model = (
         (creds.openai_model if creds and creds.openai_model else None)

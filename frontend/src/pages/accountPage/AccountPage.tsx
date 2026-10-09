@@ -630,7 +630,7 @@ export const AccountPage: React.FC = () => {
                 onChange={(e: any) => setSttEngine(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 focus:outline-none focus:border-indigo-500"
               >
-                <option value="gemini">Google Gemini 2.0 Flash (Fast & Multimodal)</option>
+                <option value="gemini">Google Gemini Flash (Fast & Multimodal)</option>
                 <option value="local_whisper">Local Whisper (100% Offline, No API key)</option>
                 <option value="openai">OpenAI Whisper API</option>
               </select>
@@ -643,7 +643,7 @@ export const AccountPage: React.FC = () => {
                 onChange={(e: any) => setLlmEngine(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 focus:outline-none focus:border-indigo-500"
               >
-                <option value="gemini">Google Gemini 2.0 Flash</option>
+                <option value="gemini">Google Gemini Flash (Recommended)</option>
                 <option value="openai">OpenAI GPT-4o</option>
               </select>
             </div>

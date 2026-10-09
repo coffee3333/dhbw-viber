@@ -88,11 +88,11 @@ Return a valid JSON object strictly matching this schema:
   "full_text": "[00:00] Speaker 1: Exact words..."
 }}
 
-Output only the raw JSON, no markdown code fence."""
+    from app.core.ai_credentials import normalize_gemini_model
 
     try:
         response = client.models.generate_content(
-            model=model_name,
+            model=normalize_gemini_model(model_name),
             contents=[uploaded_file, prompt],
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )

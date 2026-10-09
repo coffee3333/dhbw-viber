@@ -62,6 +62,7 @@ class BaseAgent:
                 raise ValueError("Gemini API key is required.")
             from google import genai
             from google.genai import types
+            from app.core.ai_credentials import normalize_gemini_model
 
             client = genai.Client(api_key=self.api_key)
             config = types.GenerateContentConfig(
@@ -69,7 +70,7 @@ class BaseAgent:
                 response_mime_type="application/json" if json_mode else None
             )
             response = client.models.generate_content(
-                model=self.model,
+                model=normalize_gemini_model(self.model),
                 contents=user_prompt,
                 config=config
             )
