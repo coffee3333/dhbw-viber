@@ -2138,9 +2138,8 @@ async def agent_chat(
             detail="Gemini API Key is not configured. Please add your personal Gemini token in your User Profile first."
         )
 
-    model_name = (creds.gemini_model if creds and creds.gemini_model else None) or "gemini-flash-latest"
-    if model_name in ("gemini-2.5-flash", "gemini-1.5-flash"):
-        model_name = "gemini-flash-latest"
+    from app.core.ai_credentials import normalize_gemini_model
+    model_name = normalize_gemini_model(creds.gemini_model if creds else None)
 
     project = None
     if payload.project_id:
