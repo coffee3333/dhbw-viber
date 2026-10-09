@@ -10,17 +10,19 @@ import {
   Eye,
   EyeOff,
   Bot,
-  FolderSync,
-  Code2,
+  Plug,
   Calendar,
   RefreshCw,
   LogOut,
   Sparkles,
   Upload,
+  FolderPlus,
+  CheckCircle2,
 } from "lucide-react";
 import { useAuthViewModel } from "../viewmodels/useAuthViewModel";
 import { useCalendarViewModel } from "../viewmodels/useCalendarViewModel";
 import { authApi } from "../api/authApi";
+import { jiraAutomationApi } from "../api/jiraAutomationApi";
 import { showToast } from "../utils/toast";
 import type { UserProfile } from "../types/auth";
 import type { AutomationProject } from "../types/jiraAutomation";
@@ -30,13 +32,14 @@ import { JiraAgentGuideView } from "../pages/jiraPage/JiraAgentGuideModal";
 export type UserCredentialsModalTab =
   | "profile"
   | "ai_models"
-  | "developer_tools"
+  | "jira"
   | "timetable"
   | "google_workspace"
   | "project"
   | "agent_guide"
   | "admin_users"
-  | "credentials";
+  | "credentials"
+  | "developer_tools";
 
 export interface UserCredentialsModalProps {
   isOpen: boolean;
@@ -73,9 +76,10 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
 
   // Normalize initialTab
   const normalizeTab = (tab?: UserCredentialsModalTab): UserCredentialsModalTab => {
-    if (!tab) return project ? "project" : "profile";
+    if (!tab) return project ? "jira" : "profile";
     if (tab === "credentials") return "ai_models";
     if (tab === "google_workspace") return "timetable";
+    if (tab === "developer_tools" || tab === "project") return "jira";
     return tab;
   };
 
@@ -97,11 +101,23 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
   const [openaiModel, setOpenaiModel] = useState("gpt-4o");
   const [isSavingAI, setIsSavingAI] = useState(false);
 
-  // Developer Tools State
+  // Jira State
   const [jiraAccountId, setJiraAccountId] = useState("");
-  const [gitAuthorName, setGitAuthorName] = useState("");
-  const [gitAuthorEmail, setGitAuthorEmail] = useState("");
-  const [isSavingDev, setIsSavingDev] = useState(false);
+  const [isSavingJiraId, setIsSavingJiraId] = useState(false);
+
+  // Available Projects (if opened globally)
+  const [availableProjects, setAvailableProjects] = useState<AutomationProject[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(project?.id || null);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
+  const [showCreateProject, setShowCreateProject] = useState(false);
+
+  // New Jira Project Form State
+  const [newProjName, setNewProjName] = useState("");
+  const [newProjDomain, setNewProjDomain] = useState("");
+  const [newProjEmail, setNewProjEmail] = useState("");
+  const [newProjToken, setNewProjToken] = useState("");
+  const [newProjKey, setNewProjKey] = useState("");
+  const [isCreatingProj, setIsCreatingProj] = useState(false);
 
   // Timetable State
   const [calUrlInput, setCalUrlInput] = useState("");
@@ -122,7 +138,7 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
     if (initialTab) {
       setActiveTab(normalizeTab(initialTab));
     } else if (project) {
-      setActiveTab("project");
+      setActiveTab("jira");
     } else {
       setActiveTab("profile");
     }
@@ -138,8 +154,6 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
   useEffect(() => {
     if (credentials) {
       setJiraAccountId(credentials.jira_account_id || "");
-      setGitAuthorName(credentials.git_author_name || "");
-      setGitAuthorEmail(credentials.git_author_email || "");
       if (credentials.gemini_model) {
         setGeminiModel(credentials.gemini_model);
       }
@@ -154,6 +168,27 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
       }
     }
   }, [credentials]);
+
+  const loadAvailableProjects = async () => {
+    try {
+      setIsLoadingProjects(true);
+      const res = await jiraAutomationApi.listProjects();
+      setAvailableProjects(Array.isArray(res) ? res : []);
+      if (res.length > 0 && !selectedProjectId) {
+        setSelectedProjectId(res[0].id);
+      }
+    } catch (err: any) {
+      console.warn("Could not load projects:", err);
+    } finally {
+      setIsLoadingProjects(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen && (activeTab === "jira" || activeTab === "agent_guide") && !project) {
+      loadAvailableProjects();
+    }
+  }, [isOpen, activeTab, project]);
 
   useEffect(() => {
     if (isOpen && currentUser?.role === "admin" && activeTab === "admin_users") {
@@ -175,6 +210,8 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
   };
 
   if (!isOpen) return null;
+
+  const currentActiveProject = project || availableProjects.find((p) => p.id === selectedProjectId) || (availableProjects.length > 0 ? availableProjects[0] : undefined);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -240,20 +277,50 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
     }
   };
 
-  const handleSaveDevCredentials = async (e: React.FormEvent) => {
+  const handleSaveJiraAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      setIsSavingDev(true);
+      setIsSavingJiraId(true);
       await updateCredentials({
         jira_account_id: jiraAccountId.trim() || undefined,
-        git_author_name: gitAuthorName.trim() || undefined,
-        git_author_email: gitAuthorEmail.trim() || undefined,
       });
-      showToast.success("Developer Credentials Saved", "Git and Jira mappings updated.");
+      showToast.success("Jira Account ID Saved", "Your Atlassian user mapping has been updated.");
     } catch (err: any) {
-      showToast.error("Failed to save credentials", err.response?.data?.detail || err.message);
+      showToast.error("Failed to save Jira ID", err.response?.data?.detail || err.message);
     } finally {
-      setIsSavingDev(false);
+      setIsSavingJiraId(false);
+    }
+  };
+
+  const handleCreateJiraProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProjName.trim()) {
+      showToast.error("Validation Error", "Project name is required.");
+      return;
+    }
+    try {
+      setIsCreatingProj(true);
+      const created = await jiraAutomationApi.createProject({
+        name: newProjName.trim(),
+        jira_domain: newProjDomain.trim() || undefined,
+        jira_email: newProjEmail.trim() || undefined,
+        jira_api_token: newProjToken.trim() || undefined,
+        jira_project_key: newProjKey.trim() || undefined,
+      });
+      showToast.success("Jira Project Connected", `Project "${created.name}" created successfully.`);
+      setNewProjName("");
+      setNewProjDomain("");
+      setNewProjEmail("");
+      setNewProjToken("");
+      setNewProjKey("");
+      setShowCreateProject(false);
+      await loadAvailableProjects();
+      setSelectedProjectId(created.id);
+      onRefreshProject?.();
+    } catch (err: any) {
+      showToast.error("Failed to create Jira project", err.response?.data?.detail || err.message);
+    } finally {
+      setIsCreatingProj(false);
     }
   };
 
@@ -348,9 +415,9 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
             <div>
               <h2 className="text-base font-bold text-white flex items-center space-x-2">
                 <span>Account & Credentials Hub</span>
-                {project && (
+                {currentActiveProject && (
                   <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-950/80 border border-indigo-500/40 text-indigo-300 font-normal">
-                    {project.name}
+                    {currentActiveProject.name}
                   </span>
                 )}
               </h2>
@@ -398,18 +465,18 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
             <span>AI Models & BYOK</span>
           </button>
 
-          {/* Tab 3: Jira & Git Tools */}
+          {/* Tab 3: Jira Integration */}
           <button
             type="button"
-            onClick={() => setActiveTab("developer_tools")}
+            onClick={() => setActiveTab("jira")}
             className={`pb-2.5 px-3 font-semibold transition border-b-2 cursor-pointer flex items-center space-x-1.5 whitespace-nowrap ${
-              activeTab === "developer_tools"
+              activeTab === "jira" || activeTab === "project"
                 ? "border-indigo-500 text-indigo-400"
                 : "border-transparent text-slate-400 hover:text-slate-200"
             }`}
           >
-            <Code2 className="w-3.5 h-3.5" />
-            <span>Jira & Git Tools</span>
+            <Plug className="w-3.5 h-3.5 text-blue-400" />
+            <span>Jira Integration</span>
           </button>
 
           {/* Tab 4: Timetable / Rapla */}
@@ -426,35 +493,20 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
             <span>Timetable / Rapla</span>
           </button>
 
-          {/* Project Specific Tabs */}
-          {project && (
-            <>
-              <button
-                type="button"
-                onClick={() => setActiveTab("project")}
-                className={`pb-2.5 px-3 font-semibold transition border-b-2 cursor-pointer flex items-center space-x-1.5 whitespace-nowrap ${
-                  activeTab === "project"
-                    ? "border-indigo-500 text-indigo-400"
-                    : "border-transparent text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                <FolderSync className="w-3.5 h-3.5" />
-                <span>Project Connection</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab("agent_guide")}
-                className={`pb-2.5 px-3 font-semibold transition border-b-2 cursor-pointer flex items-center space-x-1.5 whitespace-nowrap ${
-                  activeTab === "agent_guide"
-                    ? "border-indigo-500 text-indigo-400"
-                    : "border-transparent text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                <Bot className="w-3.5 h-3.5" />
-                <span>Agent Guide</span>
-              </button>
-            </>
+          {/* Agent Guide Tab */}
+          {currentActiveProject && (
+            <button
+              type="button"
+              onClick={() => setActiveTab("agent_guide")}
+              className={`pb-2.5 px-3 font-semibold transition border-b-2 cursor-pointer flex items-center space-x-1.5 whitespace-nowrap ${
+                activeTab === "agent_guide"
+                  ? "border-indigo-500 text-indigo-400"
+                  : "border-transparent text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <Bot className="w-3.5 h-3.5" />
+              <span>Agent Guide</span>
+            </button>
           )}
 
           {/* Admin User Management */}
@@ -745,71 +797,176 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
             </div>
           )}
 
-          {/* TAB 3: Developer & Git Tools */}
-          {activeTab === "developer_tools" && (
+          {/* TAB 3: Jira Integration */}
+          {(activeTab === "jira" || activeTab === "project" || activeTab === "developer_tools") && (
             <div className="space-y-6 w-full">
-              <form onSubmit={handleSaveDevCredentials} className="space-y-4">
-                {/* Jira Account Mapping */}
-                <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-slate-200">Jira Account ID (Atlassian ID)</label>
-                    {credentials?.jira_account_id ? (
-                      <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                        Configured
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-slate-400 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-full">
-                        Not Set
-                      </span>
-                    )}
+              {/* 1. Personal Jira Account Mapping */}
+              <form onSubmit={handleSaveJiraAccount} className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-7 h-7 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold">
+                      <Plug className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">Jira Account ID (Atlassian User ID)</h4>
+                      <p className="text-[10px] text-slate-400">Maps your user profile to Jira Cloud for sprint task assignments and ticket automation</p>
+                    </div>
                   </div>
+                  {credentials?.jira_account_id ? (
+                    <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center space-x-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>Configured</span>
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-amber-400 bg-amber-950/60 border border-amber-500/30 px-2 py-0.5 rounded-full">
+                      Not Set
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center space-x-2">
                   <input
                     type="text"
                     value={jiraAccountId}
                     onChange={(e) => setJiraAccountId(e.target.value)}
                     placeholder="e.g. 712020:e8b0a19f-784e-4a24-be77-4c602fd11c73"
-                    className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-indigo-500 font-mono"
+                    className="flex-1 px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-indigo-500 font-mono"
                   />
-                  <p className="text-[11px] text-slate-500">
-                    Maps your DHBW account to your Atlassian Jira Cloud user for automated sprint task assignment.
-                  </p>
-                </div>
-
-                {/* Git Author Name & Email */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-300">Git Author Name</label>
-                    <input
-                      type="text"
-                      value={gitAuthorName}
-                      onChange={(e) => setGitAuthorName(e.target.value)}
-                      placeholder="e.g. John Doe"
-                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-300">Git Author Email</label>
-                    <input
-                      type="email"
-                      value={gitAuthorEmail}
-                      onChange={(e) => setGitAuthorEmail(e.target.value)}
-                      placeholder="e.g. john.doe@company.com"
-                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-end pt-2">
                   <button
                     type="submit"
-                    disabled={isSavingDev}
-                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md shadow-indigo-600/30 transition cursor-pointer"
+                    disabled={isSavingJiraId}
+                    className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md shadow-indigo-600/30 transition cursor-pointer flex-shrink-0"
                   >
                     <Save className="w-3.5 h-3.5" />
-                    <span>{isSavingDev ? "Saving..." : "Save Developer Settings"}</span>
+                    <span>{isSavingJiraId ? "Saving..." : "Save ID"}</span>
                   </button>
                 </div>
               </form>
+
+              {/* 2. Jira Cloud Workspace & Projects Configuration */}
+              <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <h4 className="text-xs font-bold text-white flex items-center space-x-2">
+                      <span>Jira Cloud Workspace & Board Settings</span>
+                    </h4>
+                  </div>
+
+                  {!project && availableProjects.length > 0 && (
+                    <div className="flex items-center space-x-2">
+                      <select
+                        value={currentActiveProject?.id || ""}
+                        onChange={(e) => setSelectedProjectId(e.target.value)}
+                        className="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                      >
+                        {availableProjects.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} {p.jira_project_key ? `(${p.jira_project_key})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setShowCreateProject(!showCreateProject)}
+                        className="px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-indigo-300 text-xs font-semibold flex items-center space-x-1 transition cursor-pointer"
+                      >
+                        <FolderPlus className="w-3.5 h-3.5" />
+                        <span>{showCreateProject ? "Cancel" : "+ Connect Project"}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Form to create / connect Jira Project */}
+                {(showCreateProject || (!project && availableProjects.length === 0 && !isLoadingProjects)) && (
+                  <form onSubmit={handleCreateJiraProject} className="p-4 rounded-xl bg-slate-950/60 border border-indigo-500/30 space-y-3">
+                    <div className="text-xs font-bold text-indigo-300 flex items-center space-x-1.5">
+                      <FolderPlus className="w-4 h-4" />
+                      <span>Connect New Jira Cloud Project</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-400 block mb-1">Project Name *</label>
+                        <input
+                          type="text"
+                          required
+                          value={newProjName}
+                          onChange={(e) => setNewProjName(e.target.value)}
+                          placeholder="e.g. DHBW Software Engineering"
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-400 block mb-1">Jira Cloud Domain</label>
+                        <input
+                          type="text"
+                          value={newProjDomain}
+                          onChange={(e) => setNewProjDomain(e.target.value)}
+                          placeholder="https://your-domain.atlassian.net"
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-100"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-400 block mb-1">Jira Email</label>
+                        <input
+                          type="email"
+                          value={newProjEmail}
+                          onChange={(e) => setNewProjEmail(e.target.value)}
+                          placeholder="user@atlassian.com"
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-400 block mb-1">Jira API Token</label>
+                        <input
+                          type="password"
+                          value={newProjToken}
+                          onChange={(e) => setNewProjToken(e.target.value)}
+                          placeholder="••••••••••••"
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-400 block mb-1">Jira Project Key</label>
+                        <input
+                          type="text"
+                          value={newProjKey}
+                          onChange={(e) => setNewProjKey(e.target.value.toUpperCase())}
+                          placeholder="e.g. SCRUM"
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-100 uppercase"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end pt-1">
+                      <button
+                        type="submit"
+                        disabled={isCreatingProj}
+                        className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs flex items-center space-x-1.5 shadow-sm transition cursor-pointer"
+                      >
+                        <Plug className="w-3.5 h-3.5" />
+                        <span>{isCreatingProj ? "Connecting..." : "Connect Project"}</span>
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* Project Settings component for active project */}
+                {currentActiveProject ? (
+                  <div className="pt-2 border-t border-slate-800">
+                    <JiraProjectSettings
+                      project={currentActiveProject}
+                      onRefreshProject={() => {
+                        onRefreshProject?.();
+                        loadAvailableProjects();
+                      }}
+                    />
+                  </div>
+                ) : isLoadingProjects ? (
+                  <div className="p-8 text-center text-xs text-slate-400">Loading Jira connections...</div>
+                ) : null}
+              </div>
             </div>
           )}
 
@@ -913,25 +1070,15 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
             </div>
           )}
 
-          {/* TAB 5: Project Settings */}
-          {activeTab === "project" && project && (
-            <div className="p-2">
-              <JiraProjectSettings
-                project={project}
-                onRefreshProject={onRefreshProject || (() => {})}
-              />
-            </div>
-          )}
-
-          {/* TAB 6: Jira Agent Guide */}
-          {activeTab === "agent_guide" && (
+          {/* TAB 5: Jira Agent Guide */}
+          {activeTab === "agent_guide" && currentActiveProject && (
             <JiraAgentGuideView
-              projectId={project?.id}
-              projectName={project?.name}
+              projectId={currentActiveProject.id}
+              projectName={currentActiveProject.name}
             />
           )}
 
-          {/* TAB 7: Admin User Management */}
+          {/* TAB 6: Admin User Management */}
           {activeTab === "admin_users" && currentUser?.role === "admin" && (
             <div className="space-y-6 w-full">
               {/* Add member form */}
