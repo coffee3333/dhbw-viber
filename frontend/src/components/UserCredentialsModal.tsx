@@ -99,8 +99,6 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
 
   // Developer Tools State
   const [jiraAccountId, setJiraAccountId] = useState("");
-  const [githubToken, setGithubToken] = useState("");
-  const [showGithubToken, setShowGithubToken] = useState(false);
   const [gitAuthorName, setGitAuthorName] = useState("");
   const [gitAuthorEmail, setGitAuthorEmail] = useState("");
   const [isSavingDev, setIsSavingDev] = useState(false);
@@ -248,27 +246,12 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
       setIsSavingDev(true);
       await updateCredentials({
         jira_account_id: jiraAccountId.trim() || undefined,
-        github_token: githubToken.trim() || undefined,
         git_author_name: gitAuthorName.trim() || undefined,
         git_author_email: gitAuthorEmail.trim() || undefined,
       });
       showToast.success("Developer Credentials Saved", "Git and Jira mappings updated.");
-      setGithubToken("");
     } catch (err: any) {
       showToast.error("Failed to save credentials", err.response?.data?.detail || err.message);
-    } finally {
-      setIsSavingDev(false);
-    }
-  };
-
-  const handleClearGithubToken = async () => {
-    try {
-      setIsSavingDev(true);
-      await updateCredentials({ github_token: "" });
-      showToast.success("GitHub Token Removed", "Token cleared successfully.");
-      setGithubToken("");
-    } catch (err: any) {
-      showToast.error("Failed to clear token", err.message);
     } finally {
       setIsSavingDev(false);
     }
@@ -415,7 +398,7 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
             <span>AI Models & BYOK</span>
           </button>
 
-          {/* Tab 3: Git & Developer Tools */}
+          {/* Tab 3: Jira & Git Tools */}
           <button
             type="button"
             onClick={() => setActiveTab("developer_tools")}
@@ -426,7 +409,7 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
             }`}
           >
             <Code2 className="w-3.5 h-3.5" />
-            <span>Git & Jira Tools</span>
+            <span>Jira & Git Tools</span>
           </button>
 
           {/* Tab 4: Timetable / Rapla */}
@@ -789,51 +772,6 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
                   />
                   <p className="text-[11px] text-slate-500">
                     Maps your DHBW account to your Atlassian Jira Cloud user for automated sprint task assignment.
-                  </p>
-                </div>
-
-                {/* GitHub Personal Access Token */}
-                <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-slate-200">GitHub Personal Access Token (PAT)</label>
-                    {credentials?.has_github_token ? (
-                      <div className="flex items-center space-x-2">
-                        <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                          Configured
-                        </span>
-                        <button
-                          type="button"
-                          onClick={handleClearGithubToken}
-                          disabled={isSavingDev}
-                          className="text-[10px] text-red-400 hover:text-red-300 underline cursor-pointer"
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-[10px] text-slate-400 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-full">
-                        Not Set
-                      </span>
-                    )}
-                  </div>
-                  <div className="relative">
-                    <input
-                      type={showGithubToken ? "text" : "password"}
-                      value={githubToken}
-                      onChange={(e) => setGithubToken(e.target.value)}
-                      placeholder={credentials?.has_github_token ? (credentials.github_token_masked || "••••••••••••••••") : "ghp_..."}
-                      className="w-full pl-3 pr-10 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-indigo-500 font-mono"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowGithubToken(!showGithubToken)}
-                      className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-200 cursor-pointer"
-                    >
-                      {showGithubToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-slate-500">
-                    Required for automated code commits, feature branching, and pull request generation under your GitHub identity.
                   </p>
                 </div>
 
