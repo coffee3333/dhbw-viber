@@ -25,7 +25,7 @@ data:
   ALLOWED_ORIGINS: "https://dhbw-viber.atai.site,http://localhost:5173"
   TRANSCRIPTION_ENGINE: "gemini"
   SUMMARIZATION_ENGINE: "gemini"
-  GEMINI_MODEL: "gemini-2.0-flash"
+  GEMINI_MODEL: "gemini-flash-lite-latest"
   OPENAI_MODEL: "gpt-4o"
   WHISPER_LOCAL_MODEL: "base"
   AUDIO_LANGUAGE: "auto"

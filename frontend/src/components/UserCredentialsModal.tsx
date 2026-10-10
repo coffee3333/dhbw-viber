@@ -94,7 +94,7 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
   const [transcriptionEngine, setTranscriptionEngine] = useState<"gemini" | "openai" | "local_whisper">("gemini");
   const [geminiApiKey, setGeminiApiKey] = useState("");
   const [showGeminiKey, setShowGeminiKey] = useState(false);
-  const [geminiModel, setGeminiModel] = useState("gemini-flash-latest");
+  const [geminiModel, setGeminiModel] = useState("gemini-flash-lite-latest");
   const [openaiApiKey, setOpenaiApiKey] = useState("");
   const [showOpenaiKey, setShowOpenaiKey] = useState(false);
   const [openaiModel, setOpenaiModel] = useState("gpt-4o");
@@ -687,8 +687,9 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
                         onChange={(e) => setGeminiModel(e.target.value)}
                         className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-indigo-500 cursor-pointer"
                       >
-                        <option value="gemini-3.8-flash">Gemini 3.8 Flash (Recommended - Latest & Fast)</option>
-                        <option value="gemini-3.8-pro">Gemini 3.8 Pro</option>
+                        <option value="gemini-flash-lite-latest">Gemini Flash-Lite (Super Cheap & Eco - Recommended)</option>
+                        <option value="gemini-flash-latest">Gemini Flash (Balanced)</option>
+                        <option value="gemini-pro-latest">Gemini Pro</option>
                       </select>
                     </div>
                   </div>

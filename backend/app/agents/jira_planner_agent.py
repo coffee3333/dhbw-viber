@@ -9,7 +9,7 @@ logger = get_logger("meeting_agent.jira_planner_agent")
 class JiraPlannerAgent(BaseAgent):
     """Agent for planning Jira sprints, tasks, and realistic automated status moves."""
 
-    def __init__(self, api_key: str, model: str = "gemini-3.8-flash"):
+    def __init__(self, api_key: str, model: str = "gemini-flash-lite-latest"):
         # Default to gemini engine
         super().__init__(engine="gemini", api_key=api_key, model=model)
 

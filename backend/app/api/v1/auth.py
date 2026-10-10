@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
+from app.core.ai_credentials import normalize_gemini_model
 from app.core.auth_utils import create_access_token, hash_password, verify_password
 from app.core.config import get_settings
 from app.core.crypto import decrypt_secret, encrypt_secret, mask_secret
@@ -220,7 +221,7 @@ def get_my_profile(current_user: UserDB = Depends(get_current_user)):
             "jira_account_id": creds.jira_account_id if creds else None,
             "gemini_api_key_masked": mask_secret(raw_gemini) if raw_gemini else None,
             "has_gemini_api_key": bool(raw_gemini),
-            "gemini_model": (creds.gemini_model if creds and creds.gemini_model else "gemini-flash-latest"),
+            "gemini_model": normalize_gemini_model(creds.gemini_model if creds else None),
             "openai_api_key_masked": mask_secret(raw_openai) if raw_openai else None,
             "has_openai_api_key": bool(raw_openai),
             "openai_model": (creds.openai_model if creds and creds.openai_model else "gpt-4o"),
@@ -296,7 +297,7 @@ def update_my_credentials(
         creds.gemini_api_key_encrypted = encrypt_secret(gemini_clean) if gemini_clean else None
 
     if payload.gemini_model is not None:
-        creds.gemini_model = payload.gemini_model.strip() or "gemini-flash-latest"
+        creds.gemini_model = normalize_gemini_model(payload.gemini_model.strip() or "gemini-flash-lite-latest")
 
     if payload.openai_api_key is not None:
         openai_clean = payload.openai_api_key.strip()

@@ -25,41 +25,35 @@ class ResolvedAIConfig:
 
 def normalize_gemini_model(model: str | None) -> str:
     if not model:
-        return "gemini-flash-lite"
+        return "gemini-flash-lite-latest"
     m = model.strip()
-    if m in (
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-exp",
-        "gemini-2.0-flash-001",
-        "gemini-2.0-flash-preview",
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-latest",
-        "gemini-1.5-flash-001",
-        "gemini-1.5-flash-002",
-        "gemini-flash-latest",
-        "gemini-2.5-flash",
-        "gemini-2.5-flash-latest",
+    if m.startswith("models/"):
+        m = m[7:]
+    m_lower = m.lower()
+
+    # Match Lite models (super cheap & eco)
+    if "lite" in m_lower or m_lower in (
         "gemini-flash-lite",
+        "gemini-flash-lite-latest",
         "gemini-2.0-flash-lite",
         "gemini-2.0-flash-lite-preview",
+        "gemini-2.5-flash-lite",
+        "gemini-3.1-flash-lite",
+        "gemini-3.5-flash-lite",
         "gemini-3.8-flash-lite",
     ):
-        return "gemini-flash-lite"
-    if m in ("gemini-3.8-flash",):
-        return "gemini-3.8-flash"
-    if m in (
-        "gemini-2.0-pro",
-        "gemini-2.0-pro-exp",
-        "gemini-1.5-pro",
-        "gemini-1.5-pro-latest",
-        "gemini-1.5-pro-001",
-        "gemini-1.5-pro-002",
-        "gemini-pro-latest",
-        "gemini-2.5-pro",
-        "gemini-3.8-pro",
-    ):
-        return "gemini-3.8-pro"
+        return "gemini-flash-lite-latest"
+
+    # Match Pro models
+    if "pro" in m_lower:
+        return "gemini-pro-latest"
+
+    # Match standard Flash models
+    if "flash" in m_lower:
+        return "gemini-flash-latest"
+
     return m
+
 
 
 def resolve_user_ai_config(user: UserDB | None = None) -> ResolvedAIConfig:
