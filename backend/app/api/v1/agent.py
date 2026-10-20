@@ -63,14 +63,23 @@ def chat_with_agent(
     )
 
 
+def _scope_thread_id_for_user(raw_thread_id: str, user: UserDB) -> str:
+    """Namespace thread_id by user ID to prevent cross-user chat history leakage (IDOR)."""
+    prefix = f"u_{user.id}_"
+    if raw_thread_id.startswith(prefix):
+        return raw_thread_id
+    return f"{prefix}{raw_thread_id}"
+
+
 @router.get("/history", response_model=HistoryResponse)
 def get_thread_history(
     thread_id: str = Query(...),
     current_user: UserDB = Depends(require_pro_or_admin),
     db: Session = Depends(get_db)
 ):
-    """Retrieve message history for a specific conversation thread."""
-    messages = StudyAgentService.get_history(db, thread_id)
+    """Retrieve message history for a specific conversation thread scoped to the current user."""
+    scoped_id = _scope_thread_id_for_user(thread_id, current_user)
+    messages = StudyAgentService.get_history(db, scoped_id)
     return HistoryResponse(thread_id=thread_id, messages=messages)
 
 
@@ -80,7 +89,8 @@ def clear_thread_history(
     current_user: UserDB = Depends(require_pro_or_admin),
     db: Session = Depends(get_db)
 ):
-    """Clear conversation history for a specific thread."""
-    StudyAgentService.clear_history(db, thread_id)
+    """Clear conversation history for a specific thread scoped to the current user."""
+    scoped_id = _scope_thread_id_for_user(thread_id, current_user)
+    StudyAgentService.clear_history(db, scoped_id)
     return {"success": True, "message": f"History for thread '{thread_id}' cleared."}
 

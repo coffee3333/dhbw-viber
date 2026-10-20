@@ -320,25 +320,27 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                       {subjects.length}
                     </span>
                   </div>
-                  <div className="flex items-center space-x-1">
-                    <button
-                      type="button"
-                      onClick={handleCleanupHolidays}
-                      disabled={isCleaningHolidays}
-                      title="Clean up public holidays and non-academic entries"
-                      className="p-1 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-slate-800/80 transition cursor-pointer disabled:opacity-50"
-                    >
-                      <Sparkles className={`w-3.5 h-3.5 ${isCleaningHolidays ? "animate-spin text-amber-400" : ""}`} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleOpenCreateSubject}
-                      title="Add New Subject"
-                      className="p-1 rounded-lg text-slate-400 hover:text-indigo-300 hover:bg-slate-800/80 transition cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  {isAdmin && (
+                    <div className="flex items-center space-x-1">
+                      <button
+                        type="button"
+                        onClick={handleCleanupHolidays}
+                        disabled={isCleaningHolidays}
+                        title="Clean up public holidays and non-academic entries"
+                        className="p-1 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-slate-800/80 transition cursor-pointer disabled:opacity-50"
+                      >
+                        <Sparkles className={`w-3.5 h-3.5 ${isCleaningHolidays ? "animate-spin text-amber-400" : ""}`} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleOpenCreateSubject}
+                        title="Add New Subject"
+                        className="p-1 rounded-lg text-slate-400 hover:text-indigo-300 hover:bg-slate-800/80 transition cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1 pt-1">
@@ -362,29 +364,31 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                             <span className="truncate">{sub.name}</span>
                           </div>
                           <div className="flex items-center space-x-1 flex-shrink-0">
-                            <span className="text-[10px] text-slate-500 font-mono group-hover:hidden">
+                            <span className={`text-[10px] text-slate-500 font-mono ${isAdmin ? "group-hover:hidden" : ""}`}>
                               {sub.lectures_count ?? 0}
                             </span>
-                            <div className="hidden group-hover:flex items-center space-x-0.5">
-                              <span
-                                role="button"
-                                tabIndex={0}
-                                onClick={(e) => handleOpenEditSubject(sub, e)}
-                                title="Edit Subject"
-                                className="p-1 rounded-md text-slate-400 hover:text-indigo-300 hover:bg-slate-700/60 transition cursor-pointer"
-                              >
-                                <Pencil className="w-3 h-3" />
-                              </span>
-                              <span
-                                role="button"
-                                tabIndex={0}
-                                onClick={(e) => handleDeleteSubjectDirect(sub, e)}
-                                title="Delete Subject"
-                                className="p-1 rounded-md text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </span>
-                            </div>
+                            {isAdmin && (
+                              <div className="hidden group-hover:flex items-center space-x-0.5">
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={(e) => handleOpenEditSubject(sub, e)}
+                                  title="Edit Subject"
+                                  className="p-1 rounded-md text-slate-400 hover:text-indigo-300 hover:bg-slate-700/60 transition cursor-pointer"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </span>
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={(e) => handleDeleteSubjectDirect(sub, e)}
+                                  title="Delete Subject"
+                                  className="p-1 rounded-md text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </button>
                       </div>
@@ -393,27 +397,31 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                   {subjects.length === 0 && (
                     <div className="p-3 text-center text-xs text-slate-500">
                       <span>No subjects loaded.</span>
-                      <button
-                        type="button"
-                        onClick={handleOpenCreateSubject}
-                        className="block mt-1.5 mx-auto text-indigo-400 hover:underline font-semibold cursor-pointer"
-                      >
-                        + Create Subject
-                      </button>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={handleOpenCreateSubject}
+                          className="block mt-1.5 mx-auto text-indigo-400 hover:underline font-semibold cursor-pointer"
+                        >
+                          + Create Subject
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
               </div>
             ) : (
               <div className="space-y-2 flex flex-col items-center">
-                <button
-                  type="button"
-                  onClick={handleOpenCreateSubject}
-                  className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-indigo-300 hover:bg-slate-800/60 transition cursor-pointer"
-                  title="Add New Subject"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={handleOpenCreateSubject}
+                    className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-indigo-300 hover:bg-slate-800/60 transition cursor-pointer"
+                    title="Add New Subject"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                )}
                 {subjects.map((sub) => (
                   <button
                     key={sub.id}
@@ -501,9 +509,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                   <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-purple-950 text-purple-300 border border-purple-500/30 uppercase font-bold">
                     Admin
                   </span>
+                ) : currentUser?.role === "pro_student" ? (
+                  <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-500/30 uppercase font-bold">
+                    Pro
+                  </span>
                 ) : (
                   <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400 border border-slate-700 uppercase font-medium">
-                    Member
+                    Student
                   </span>
                 )}
               </div>

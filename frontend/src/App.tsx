@@ -20,7 +20,6 @@ export const App: React.FC = () => {
 
   const {
     activeApp,
-    setActiveApp,
     isUserCredentialsModalOpen,
     setUserCredentialsModalOpen,
     isTasksModalOpen,
@@ -39,12 +38,6 @@ export const App: React.FC = () => {
 
   const { authRequired, isAuthenticated, currentUser, logout } = useAuthViewModel();
   const googleStatus = useSettingsStore((s) => s.googleStatus);
-
-  useEffect(() => {
-    if (currentUser && currentUser.role !== "admin" && activeApp !== "study_hub") {
-      setActiveApp("study_hub");
-    }
-  }, [currentUser, activeApp, setActiveApp]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -105,7 +98,7 @@ export const App: React.FC = () => {
         {/* Main Application Workspace Area */}
         <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
           <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-            {activeApp === "jira_automation" && currentUser?.role === "admin" ? (
+            {activeApp === "jira_automation" ? (
               <JiraAutomationPage />
             ) : (
               <>

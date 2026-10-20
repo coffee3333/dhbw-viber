@@ -45,7 +45,7 @@ export const AccountPage: React.FC = () => {
   const [newAccUsername, setNewAccUsername] = useState("");
   const [newAccDisplayName, setNewAccDisplayName] = useState("");
   const [newAccPassword, setNewAccPassword] = useState("");
-  const [newAccRole, setNewAccRole] = useState<"member" | "admin">("member");
+  const [newAccRole, setNewAccRole] = useState<"student" | "pro_student" | "admin">("student");
   const [showAccPassword, setShowAccPassword] = useState(false);
   const [isCreatingAccUser, setIsCreatingAccUser] = useState(false);
 
@@ -741,8 +741,9 @@ export const AccountPage: React.FC = () => {
                     onChange={(e) => setNewAccRole(e.target.value as any)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer"
                   >
-                    <option value="member">Member (Developer / Student)</option>
-                    <option value="admin">Administrator</option>
+                    <option value="student">Student (Read-Only)</option>
+                    <option value="pro_student">Pro Student (Read + AI Chat)</option>
+                    <option value="admin">Administrator (Full Access)</option>
                   </select>
                 </div>
               </div>

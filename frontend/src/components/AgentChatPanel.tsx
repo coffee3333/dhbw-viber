@@ -13,6 +13,7 @@ import {
   Zap,
 } from "lucide-react";
 import { agentApi, type AgentChatMessage } from "../api/agentApi";
+import { useAuthViewModel } from "../viewmodels/useAuthViewModel";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
 interface AgentChatPanelProps {
@@ -38,6 +39,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
   onSummaryUpdated,
   onOpenCredentialsModal,
 }) => {
+  const { isAdmin } = useAuthViewModel();
   const [messages, setMessages] = useState<AgentChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -220,13 +222,17 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
   const quickActionPrompts =
     scope === "lecture"
       ? [
-          { label: "🔥 /grill me", prompt: "/grill me" },
-          { label: "✏️ Update Summary", prompt: "Please update the lecture summary with my notes and core takeaways." },
+          ...(isAdmin
+            ? [
+                { label: "🔥 /grill me", prompt: "/grill me" },
+                { label: "✏️ Update Summary", prompt: "Please update the lecture summary with my notes and core takeaways." },
+              ]
+            : []),
           { label: "💡 Explain Concepts", prompt: "What are the core concepts and fundamental theory in this lecture?" },
           { label: "📋 Action Items", prompt: "What are the homework tasks, assignments, and action items from this lecture?" },
         ]
       : [
-          { label: "🔥 /grill me on Course", prompt: "/grill me" },
+          ...(isAdmin ? [{ label: "🔥 /grill me on Course", prompt: "/grill me" }] : []),
           { label: "🔍 Search Topics", prompt: "Which lecture covered indexing mechanisms and B+ trees?" },
           { label: "📊 List Lectures", prompt: "List all scheduled and completed lectures in this subject." },
           { label: "📚 Exam Focus", prompt: "What are the most high-yield exam topics across this whole course?" },
@@ -325,8 +331,10 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
               </h4>
               <p className="text-[11px] text-slate-400 max-w-xs mx-auto leading-relaxed">
                 {scope === "lecture"
-                  ? "I have full access to your lecture slides, transcript, summaries, and notes. Ask questions, update your summary, or type /grill me to practice!"
-                  : "I can search all lectures, slides, and summaries across the entire course. Ask about any topic, compare lectures, or practice exam questions."}
+                  ? isAdmin
+                    ? "I have full access to your lecture slides, transcript, summaries, and notes. Ask questions, update your summary, or type /grill me to practice!"
+                    : "I have full access to the lecture slides, transcript, and summary. Ask me any questions or request clear explanations!"
+                  : "I can search all lectures, slides, and summaries across the entire course. Ask about any topic or compare lectures."}
               </p>
             </div>
           </div>
@@ -483,9 +491,13 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
             placeholder={
               tokenSaver
                 ? "Ask concisely (⚡ Eco-Mode Active)..."
-                : (scope === "lecture"
-                    ? "Ask anything about this lecture or /grill me..."
-                    : "Ask anything about this subject or /grill me...")
+                : scope === "lecture"
+                ? isAdmin
+                  ? "Ask anything about this lecture or /grill me..."
+                  : "Ask a question about this lecture..."
+                : isAdmin
+                ? "Ask anything about this subject or /grill me..."
+                : "Ask a question about this subject..."
             }
             className="flex-1 px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 text-xs focus:outline-none focus:border-indigo-500 transition disabled:opacity-50"
           />

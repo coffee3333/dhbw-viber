@@ -475,9 +475,14 @@ COMMUNICATION STYLE:
         Executes a LangGraph conversational turn with dynamic tools and context.
         """
         clean_msg = message.strip()
-        effective_thread_id = thread_id or (
+        base_thread_id = thread_id or (
             f"lec_chat_{lecture_id}" if scope == "lecture" and lecture_id else f"subj_chat_{subject_id or 'general'}"
         )
+        user_id = getattr(user, "id", None)
+        if user_id and not base_thread_id.startswith(f"u_{user_id}_"):
+            effective_thread_id = f"u_{user_id}_{base_thread_id}"
+        else:
+            effective_thread_id = base_thread_id
 
         # Context details
         lec_obj = db.query(LectureDB).filter(LectureDB.id == lecture_id).first() if lecture_id else None
@@ -579,21 +584,35 @@ COMMUNICATION STYLE:
         suggestions = []
         if not token_saver:
             if scope == "lecture":
-                suggestions = [
-                    "🔥 /grill me on this topic",
-                    "✏️ Update summary with key takeaways",
-                    "💡 Explain the core formula/algorithm",
-                ]
+                if user_role == "admin":
+                    suggestions = [
+                        "🔥 /grill me on this topic",
+                        "✏️ Update summary with key takeaways",
+                        "💡 Explain the core formula/algorithm",
+                    ]
+                else:
+                    suggestions = [
+                        "💡 Explain the core formula/algorithm",
+                        "📋 Summarize the key takeaways",
+                        "🔍 Give a practical example",
+                    ]
             else:
-                suggestions = [
-                    "🔥 /grill me across the course",
-                    "🔍 Which lecture covered indexing?",
-                    "📊 Compare lecture topics",
-                ]
+                if user_role == "admin":
+                    suggestions = [
+                        "🔥 /grill me across the course",
+                        "🔍 Which lecture covered indexing?",
+                        "📊 Compare lecture topics",
+                    ]
+                else:
+                    suggestions = [
+                        "🔍 Which lecture covered indexing?",
+                        "📊 Compare lecture topics",
+                        "📚 What are the main exam topics?",
+                    ]
 
         return {
             "response": response_text,
-            "thread_id": effective_thread_id,
+            "thread_id": base_thread_id,
             "actions_taken": tracker["actions_taken"],
             "suggested_followups": suggestions,
             "updated_summary": tracker["updated_summary"]

@@ -1,4 +1,6 @@
+import ipaddress
 import re
+import socket
 import urllib.parse
 import urllib.request
 from datetime import UTC, date, datetime, timedelta
@@ -44,20 +46,56 @@ LECTURER_PATTERN = re.compile(
 )
 
 
+MAX_ICAL_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+def _validate_calendar_url_ssrf(url: str) -> str:
+    """Validate calendar URL and resolve DNS to block private/loopback/metadata SSRF."""
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("https", "http"):
+        raise ValueError(f"Unsupported URL scheme: {parsed.scheme}")
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("Invalid calendar URL: missing hostname")
+
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        addr_info = socket.getaddrinfo(hostname, port, proto=socket.IPPROTO_TCP)
+        for entry in addr_info:
+            ip_str = entry[4][0]
+            ip_obj = ipaddress.ip_address(ip_str)
+            if (
+                ip_obj.is_private
+                or ip_obj.is_loopback
+                or ip_obj.is_link_local
+                or ip_obj.is_reserved
+                or ip_obj.is_multicast
+            ):
+                raise ValueError(f"Calendar URL resolves to forbidden internal IP address: {ip_str}")
+    except socket.gaierror as e:
+        raise ValueError(f"Could not resolve calendar host '{hostname}': {e}") from e
+
+    return url
+
+
 def fetch_ical_from_url(url: str) -> str:
-    """Fetch raw iCal string from URL (handles webcal:// and headers)."""
+    """Fetch raw iCal string from URL (handles webcal:// and headers) with SSRF and size protection."""
     clean_url = url.strip()
     if clean_url.startswith("webcal://"):
         clean_url = "https://" + clean_url[9:]
     elif clean_url.startswith("http://"):
         clean_url = "https://" + clean_url[7:]
 
+    clean_url = _validate_calendar_url_ssrf(clean_url)
+
     req = urllib.request.Request(
         clean_url,
         headers={"User-Agent": "MeetingAgent-StudentManager/1.0 (DHBW Schedule Sync)"}
     )
     with urllib.request.urlopen(req, timeout=15) as response:
-        content = response.read()
+        content = response.read(MAX_ICAL_BYTES + 1)
+        if len(content) > MAX_ICAL_BYTES:
+            raise ValueError("Calendar feed exceeds maximum allowed size of 10 MB")
         return content.decode("utf-8", errors="replace")
 
 

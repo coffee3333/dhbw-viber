@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.ai_credentials import resolve_user_ai_config
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.core.security import get_current_user_optional, require_admin
+from app.core.security import get_current_user_optional, require_admin, require_pro_or_admin
 from app.models.db import LectureDB, LectureKnowledgeChunkDB, SubjectDB
 from app.models.user import UserDB
 from app.services.rag_service import GrillAgent, RagService
@@ -156,7 +156,11 @@ def evaluate_student_answer(
 
 
 @router.post("/search")
-def search_knowledge(req: SearchRequest, db: Session = Depends(get_db)):
+def search_knowledge(
+    req: SearchRequest,
+    _: UserDB = Depends(require_pro_or_admin),
+    db: Session = Depends(get_db),
+):
     """Search knowledge base chunks."""
     results = RagService.search(
         db,
@@ -169,20 +173,30 @@ def search_knowledge(req: SearchRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/sync")
-def sync_all_knowledge(db: Session = Depends(get_db)):
-    """Re-index all lectures and transcripts."""
+def sync_all_knowledge(
+    _: UserDB = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Re-index all lectures and transcripts. Admin only."""
     return RagService.sync_all(db)
 
 
 @router.post("/index-lecture/{lecture_id}")
-def index_single_lecture(lecture_id: str, db: Session = Depends(get_db)):
-    """Index a single lecture."""
+def index_single_lecture(
+    lecture_id: str,
+    _: UserDB = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Index a single lecture. Admin only."""
     count = RagService.index_lecture(db, lecture_id)
     return {"message": f"Lecture indexed ({count} chunks created)", "chunks_created": count}
 
 
 @router.get("/stats")
-def get_knowledge_stats(db: Session = Depends(get_db)):
+def get_knowledge_stats(
+    _: UserDB = Depends(require_pro_or_admin),
+    db: Session = Depends(get_db),
+):
     """Get stats on indexed knowledge base."""
     total_chunks = db.query(LectureKnowledgeChunkDB).count()
     return {
@@ -192,8 +206,12 @@ def get_knowledge_stats(db: Session = Depends(get_db)):
 
 
 @router.get("/history/{thread_id}")
-def get_thread_history(thread_id: str, db: Session = Depends(get_db)):
-    """Fetch checkpointer execution history for a study / quiz thread."""
+def get_thread_history(
+    thread_id: str,
+    _: UserDB = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Fetch checkpointer execution history for a study / quiz thread. Admin only."""
     from app.services.checkpointer import AgentCheckpointer
     cps = AgentCheckpointer.list_checkpoints(db, thread_id)
     return {
@@ -213,8 +231,12 @@ def get_thread_history(thread_id: str, db: Session = Depends(get_db)):
 
 
 @router.delete("/history/{thread_id}")
-def delete_thread_history(thread_id: str, db: Session = Depends(get_db)):
-    """Clear checkpointer history for a thread."""
+def delete_thread_history(
+    thread_id: str,
+    _: UserDB = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Clear checkpointer history for a thread. Admin only."""
     from app.services.checkpointer import AgentCheckpointer
     deleted = AgentCheckpointer.delete_thread(db, thread_id)
     return {"message": f"Deleted {deleted} checkpoints for thread {thread_id}"}

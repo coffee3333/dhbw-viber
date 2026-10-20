@@ -337,7 +337,7 @@ def resummarize_meeting(
     return summary
 
 
-@router.post("/{meeting_id}/action_items/{item_id}/toggle")
+@router.post("/{meeting_id}/action_items/{item_id}/toggle", dependencies=[Depends(require_admin)])
 def toggle_action_item(
     meeting_id: str,
     item_id: int,

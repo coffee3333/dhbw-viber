@@ -14,7 +14,7 @@ from app.api.v1 import (
     system,
     jira_automation,
 )
-from app.core.security import require_admin, require_auth
+from app.core.security import require_admin, require_auth, require_pro_or_admin
 
 # ----------------- ROOT ROUTER -----------------
 # Mounted directly at application root: /health, /, /recordings/{filename}
@@ -31,15 +31,15 @@ api_router.include_router(auth.router)
 api_router.include_router(system.router)
 
 # Protected routes (require valid auth session)
-# Admin-only Jira Automation
-api_router.include_router(jira_automation.router, dependencies=[Depends(require_admin)])
+# Jira Automation (accessible to all authenticated users with per-project isolation)
+api_router.include_router(jira_automation.router, dependencies=[Depends(require_auth)])
 api_router.include_router(calendar.router, dependencies=[Depends(require_auth)])
 api_router.include_router(google.router, dependencies=[Depends(require_auth)])
 api_router.include_router(meetings.router, dependencies=[Depends(require_auth)])
 api_router.include_router(settings.router, dependencies=[Depends(require_auth)])
 
-# Admin-only AI Intelligence & Chat routes (Grill Me, RAG Tutor, Agent Chat)
-api_router.include_router(chat.router, dependencies=[Depends(require_admin)])
-api_router.include_router(rag.router, dependencies=[Depends(require_admin)])
-api_router.include_router(agent.router, dependencies=[Depends(require_admin)])
+# AI Intelligence & Chat routes (Pro Student + Admin for chat/search; Admin-only for Grill Me & indexing)
+api_router.include_router(chat.router, dependencies=[Depends(require_pro_or_admin)])
+api_router.include_router(rag.router, dependencies=[Depends(require_pro_or_admin)])
+api_router.include_router(agent.router, dependencies=[Depends(require_pro_or_admin)])
 api_router.include_router(recordings.router)

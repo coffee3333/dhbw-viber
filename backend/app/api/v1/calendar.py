@@ -180,12 +180,12 @@ def list_subjects(db: Session = Depends(get_db)):
     return results
 
 
-@router.post("/subjects", response_model=SubjectSchema, dependencies=[Depends(require_auth)])
+@router.post("/subjects", response_model=SubjectSchema, dependencies=[Depends(require_admin)])
 def create_subject(
     payload: SubjectCreateSchema,
     db: Session = Depends(get_db)
 ):
-    """Create a new academic subject/module."""
+    """Create a new academic subject/module. Admin only."""
     if not payload.name or not payload.name.strip():
         raise HTTPException(status_code=400, detail="Subject name cannot be empty")
 
@@ -215,7 +215,7 @@ def create_subject(
     )
 
 
-@router.put("/subjects/{subject_id}", response_model=SubjectSchema, dependencies=[Depends(require_auth)])
+@router.put("/subjects/{subject_id}", response_model=SubjectSchema, dependencies=[Depends(require_admin)])
 def update_subject(
     subject_id: str,
     payload: SubjectUpdateSchema,
@@ -249,8 +249,8 @@ def update_subject(
     )
 
 
-@router.post("/cleanup-holidays", dependencies=[Depends(require_auth)])
-@router.post("/subjects/cleanup-holidays", dependencies=[Depends(require_auth)])
+@router.post("/cleanup-holidays", dependencies=[Depends(require_admin)])
+@router.post("/subjects/cleanup-holidays", dependencies=[Depends(require_admin)])
 def cleanup_holidays(db: Session = Depends(get_db)):
     """Automatically identify and remove public holidays and non-academic calendar entries."""
     holiday_keywords = [
@@ -442,9 +442,9 @@ def get_subject_detail(subject_id: str, db: Session = Depends(get_db)):
     )
 
 
-@router.delete("/subjects/{subject_id}", dependencies=[Depends(require_auth)])
+@router.delete("/subjects/{subject_id}", dependencies=[Depends(require_admin)])
 def delete_subject(subject_id: str, db: Session = Depends(get_db)):
-    """Delete a subject and all associated non-academic or unwanted lecture entries."""
+    """Delete a subject and all associated non-academic or unwanted lecture entries. Admin only."""
     subject = db.query(SubjectDB).filter(SubjectDB.id == subject_id).first()
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
@@ -462,12 +462,12 @@ def delete_subject(subject_id: str, db: Session = Depends(get_db)):
     return {"message": f"Subject '{subject.name}' and its lectures deleted successfully."}
 
 
-@router.post("/lectures", response_model=LectureChainItemSchema, dependencies=[Depends(require_auth)])
+@router.post("/lectures", response_model=LectureChainItemSchema, dependencies=[Depends(require_admin)])
 def create_lecture(
     payload: LectureCreateSchema,
     db: Session = Depends(get_db)
 ):
-    """Create a new class/lecture slot for a subject."""
+    """Create a new class/lecture slot for a subject. Admin only."""
     subj = db.query(SubjectDB).filter(SubjectDB.id == payload.subject_id).first()
     if not subj:
         raise HTTPException(status_code=404, detail="Subject not found")
@@ -521,13 +521,13 @@ def create_lecture(
     )
 
 
-@router.put("/lectures/{lecture_id}", response_model=LectureChainItemSchema, dependencies=[Depends(require_auth)])
+@router.put("/lectures/{lecture_id}", response_model=LectureChainItemSchema, dependencies=[Depends(require_admin)])
 def update_lecture(
     lecture_id: str,
     payload: LectureUpdateSchema,
     db: Session = Depends(get_db)
 ):
-    """Update a class/lecture slot."""
+    """Update a class/lecture slot. Admin only."""
     lecture = db.query(LectureDB).filter(LectureDB.id == lecture_id).first()
     if not lecture:
         raise HTTPException(status_code=404, detail="Class not found")
@@ -577,9 +577,9 @@ def update_lecture(
     )
 
 
-@router.delete("/lectures/{lecture_id}", dependencies=[Depends(require_auth)])
+@router.delete("/lectures/{lecture_id}", dependencies=[Depends(require_admin)])
 def delete_lecture(lecture_id: str, db: Session = Depends(get_db)):
-    """Delete a class/lecture slot."""
+    """Delete a class/lecture slot. Admin only."""
     lecture = db.query(LectureDB).filter(LectureDB.id == lecture_id).first()
     if not lecture:
         raise HTTPException(status_code=404, detail="Class not found")
@@ -838,9 +838,9 @@ def get_lecture_detail(lecture_id: str, db: Session = Depends(get_db)):
     }
 
 
-@router.post("/lectures/{lecture_id}/action_items/{item_id}/toggle")
+@router.post("/lectures/{lecture_id}/action_items/{item_id}/toggle", dependencies=[Depends(require_admin)])
 def toggle_lecture_action_item(lecture_id: str, item_id: int, db: Session = Depends(get_db)):
-    """Toggle completion status for an action item attached to a lecture or its predecessor."""
+    """Toggle completion status for an action item attached to a lecture or its predecessor. Admin only."""
     item = db.query(ActionItemDB).filter(ActionItemDB.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Action item not found")
@@ -851,7 +851,7 @@ def toggle_lecture_action_item(lecture_id: str, item_id: int, db: Session = Depe
 
 
 
-@router.patch("/lectures/{lecture_id}/status", dependencies=[Depends(require_auth)])
+@router.patch("/lectures/{lecture_id}/status", dependencies=[Depends(require_admin)])
 def update_lecture_status(lecture_id: str, payload: LectureStatusUpdate, db: Session = Depends(get_db)):
     lec = db.query(LectureDB).filter(LectureDB.id == lecture_id).first()
     if not lec:
@@ -861,7 +861,7 @@ def update_lecture_status(lecture_id: str, payload: LectureStatusUpdate, db: Ses
     return {"message": "Status updated", "status": lec.status}
 
 
-@router.patch("/lectures/{lecture_id}/notes", dependencies=[Depends(require_auth)])
+@router.patch("/lectures/{lecture_id}/notes", dependencies=[Depends(require_admin)])
 def update_lecture_notes(lecture_id: str, payload: LectureNotesUpdate, db: Session = Depends(get_db)):
     lec = db.query(LectureDB).filter(LectureDB.id == lecture_id).first()
     if not lec:
@@ -873,7 +873,7 @@ def update_lecture_notes(lecture_id: str, payload: LectureNotesUpdate, db: Sessi
     return {"message": "Notes saved", "notes": lec.notes}
 
 
-@router.post("/lectures/{lecture_id}/materials", dependencies=[Depends(require_auth)])
+@router.post("/lectures/{lecture_id}/materials", dependencies=[Depends(require_admin)])
 def add_lecture_material(lecture_id: str, payload: LectureMaterialCreate, db: Session = Depends(get_db)):
     lec = db.query(LectureDB).filter(LectureDB.id == lecture_id).first()
     if not lec:
@@ -895,7 +895,7 @@ def add_lecture_material(lecture_id: str, payload: LectureMaterialCreate, db: Se
     return {"message": "Material added", "material": new_item, "materials": current_materials}
 
 
-@router.delete("/lectures/{lecture_id}/materials/{material_id}", dependencies=[Depends(require_auth)])
+@router.delete("/lectures/{lecture_id}/materials/{material_id}", dependencies=[Depends(require_admin)])
 def delete_lecture_material(lecture_id: str, material_id: str, db: Session = Depends(get_db)):
     lec = db.query(LectureDB).filter(LectureDB.id == lecture_id).first()
     if not lec:
@@ -909,7 +909,7 @@ def delete_lecture_material(lecture_id: str, material_id: str, db: Session = Dep
     return {"message": "Material deleted", "materials": current_materials}
 
 
-@router.post("/lectures/{lecture_id}/materials/upload", dependencies=[Depends(require_auth)])
+@router.post("/lectures/{lecture_id}/materials/upload", dependencies=[Depends(require_admin)])
 def upload_lecture_material(
     lecture_id: str,
     file: UploadFile = File(...),
@@ -963,7 +963,7 @@ def get_material_file(lecture_id: str, filename: str):
     return FileResponse(file_path, filename=filename)
 
 
-@router.post("/lectures/{lecture_id}/generate-summary", dependencies=[Depends(require_auth)])
+@router.post("/lectures/{lecture_id}/generate-summary", dependencies=[Depends(require_admin)])
 def generate_lecture_summary(
     lecture_id: str,
     payload: dict | None = Body(None),

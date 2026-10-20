@@ -266,6 +266,59 @@ class AgentGuideResponse(BaseModel):
 # ==================== HELPERS ====================
 
 
+def _verify_project_access(db: Session, project_id: str, user: UserDB) -> AutomationProjectDB:
+    """Verify project exists and the authenticated user is either an admin or a member of the project."""
+    proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
+    if not proj:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if user.role != "admin":
+        is_member = any(m.user_id == user.id for m in proj.members)
+        if not is_member:
+            raise HTTPException(
+                status_code=403,
+                detail="Forbidden: You do not have access to this Jira Automation project."
+            )
+    return proj
+
+
+def _verify_sprint_access(db: Session, sprint_id: str, user: UserDB) -> AutomationSprintDB:
+    """Verify sprint exists and the user has access to its parent project."""
+    sprint = db.query(AutomationSprintDB).filter(AutomationSprintDB.id == sprint_id).first()
+    if not sprint:
+        raise HTTPException(status_code=404, detail="Sprint not found")
+    _verify_project_access(db, sprint.project_id, user)
+    return sprint
+
+
+def _verify_task_access(db: Session, task_id: str, user: UserDB) -> AutomationTaskDB:
+    """Verify task exists and the user has access to its parent project."""
+    task = db.query(AutomationTaskDB).filter(AutomationTaskDB.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.sprint:
+        _verify_project_access(db, task.sprint.project_id, user)
+    elif user.role != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden: Task is not linked to an accessible project.")
+    return task
+
+
+def _resolve_accessible_project(db: Session, project_id: str | None, user: UserDB) -> AutomationProjectDB | None:
+    """Resolve a specific project (with access check) or the user's first accessible project."""
+    if project_id:
+        return _verify_project_access(db, project_id, user)
+    if user.role == "admin":
+        return db.query(AutomationProjectDB).order_by(AutomationProjectDB.created_at.desc()).first()
+    project_ids = [m.project_id for m in user.project_memberships]
+    if not project_ids:
+        return None
+    return (
+        db.query(AutomationProjectDB)
+        .filter(AutomationProjectDB.id.in_(project_ids))
+        .order_by(AutomationProjectDB.created_at.desc())
+        .first()
+    )
+
+
 def _to_utc(dt: datetime | None) -> datetime | None:
     """Ensure datetime has UTC tzinfo so Pydantic serializes with 'Z'."""
     if dt is None:
@@ -507,12 +560,10 @@ async def create_project(
 async def get_project(
     project_id: str,
     db: Session = Depends(get_db),
-    current_user: UserDB | None = Depends(get_current_user_optional),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Get project details."""
-    proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="Project not found")
+    proj = _verify_project_access(db, project_id, current_user)
     return _project_to_response(proj)
 
 
@@ -538,9 +589,7 @@ async def get_project_agent_guide(
     current_user: UserDB = Depends(get_current_user),
 ):
     """Retrieve dynamically generated AGENTS.md and CLAUDE.md integration guides for a specific project."""
-    proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="Project not found")
+    proj = _verify_project_access(db, project_id, current_user)
 
     base_url = _resolve_base_url(request, origin)
     agents_md = generate_agents_guide(
@@ -580,7 +629,7 @@ async def get_general_agent_guide(
     """Retrieve dynamically generated AGENTS.md and CLAUDE.md integration guides."""
     proj = None
     if project_id:
-        proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
+        proj = _verify_project_access(db, project_id, current_user)
 
     base_url = _resolve_base_url(request, origin)
     agents_md = generate_agents_guide(
@@ -699,10 +748,10 @@ async def delete_project(
 async def list_project_members(
     project_id: str,
     db: Session = Depends(get_db),
-    current_user: UserDB | None = Depends(get_current_user_optional),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """List all members assigned to this project, auto-syncing from Jira API if available."""
-    proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
+    proj = _verify_project_access(db, project_id, current_user)
     if proj and proj.jira_project_key:
         jira = get_jira_client_for_project(proj)
         if jira:
@@ -743,7 +792,7 @@ async def list_project_members(
                             username=username,
                             display_name=disp_name,
                             email=user_email,
-                            role="member",
+                            role="student",
                             password_hash="jira_synced_user",
                             is_active=True,
                         )
@@ -767,12 +816,11 @@ async def list_project_members(
                         .first()
                     )
                     if not pm:
-                        role_proj = "lead" if "atai" in disp_name.lower() else "developer"
                         pm = ProjectMemberDB(
                             id=str(uuid.uuid4()),
                             project_id=project_id,
                             user_id=user.id,
-                            role_in_project=role_proj,
+                            role_in_project="developer",
                         )
                         db.add(pm)
 
@@ -823,12 +871,10 @@ async def list_project_members(
 async def get_project_issue_types(
     project_id: str,
     db: Session = Depends(get_db),
-    _: UserDB | None = Depends(get_current_user_optional),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Fetch available issue types for the project directly from Jira."""
-    proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="Project not found")
+    proj = _verify_project_access(db, project_id, current_user)
 
     default_types = [
         IssueTypeResponse(name="Task", subtask=False),
@@ -961,12 +1007,10 @@ async def remove_project_member(
 async def test_project_jira_connection(
     project_id: str,
     db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Test Jira credentials and return authenticated user details."""
-    proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="Project not found")
+    proj = _verify_project_access(db, project_id, current_user)
 
     jira = get_jira_client_for_project(proj)
     if not jira:
@@ -989,12 +1033,10 @@ async def test_project_jira_connection(
 async def discover_jira_members(
     project_id: str,
     db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Fetch assignable Jira users for the project to easily map account IDs."""
-    proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="Project not found")
+    proj = _verify_project_access(db, project_id, current_user)
 
     jira = get_jira_client_for_project(proj)
     if not jira:
@@ -1015,12 +1057,10 @@ async def discover_jira_members(
 async def discover_jira_fields(
     project_id: str,
     db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Fetch Jira custom fields to help configure story points and custom attributes."""
-    proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="Project not found")
+    proj = _verify_project_access(db, project_id, current_user)
 
     jira = get_jira_client_for_project(proj)
     if not jira:
@@ -1038,12 +1078,10 @@ async def discover_jira_fields(
 async def discover_jira_boards(
     project_id: str,
     db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """List all accessible Agile boards in Jira."""
-    proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="Project not found")
+    proj = _verify_project_access(db, project_id, current_user)
 
     jira = get_jira_client_for_project(proj)
     if not jira:
@@ -1061,12 +1099,10 @@ async def discover_jira_boards(
 async def sync_jira_sprints(
     project_id: str,
     db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Sync sprints and their issues from Jira board into the local database."""
-    proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="Project not found")
+    proj = _verify_project_access(db, project_id, current_user)
     if not proj.jira_board_id:
         raise HTTPException(status_code=400, detail="jira_board_id is required to sync sprints")
 
@@ -1323,10 +1359,10 @@ async def list_sprints(
     project_id: str,
     board_id: int | None = None,
     db: Session = Depends(get_db),
-    _: UserDB | None = Depends(get_current_user_optional),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """List all sprints for a project ordered by start date, filtered by active board."""
-    proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
+    proj = _verify_project_access(db, project_id, current_user)
     active_board = board_id if board_id is not None else (proj.jira_board_id if proj else None)
 
     query = db.query(AutomationSprintDB).filter(AutomationSprintDB.project_id == project_id)
@@ -1344,12 +1380,10 @@ async def create_sprint(
     project_id: str,
     data: SprintCreate,
     db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Create and schedule a new automation sprint. If start_now=True, immediately starts in Jira."""
-    proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="Project not found")
+    proj = _verify_project_access(db, project_id, current_user)
 
     jira = get_jira_client_for_project(proj)
     target_board_id = data.board_id or proj.jira_board_id
@@ -1405,13 +1439,10 @@ async def create_sprint(
 async def get_sprint(
     sprint_id: str,
     db: Session = Depends(get_db),
-    _: UserDB | None = Depends(get_current_user_optional),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Get single sprint with full task schedule."""
-    sprint = db.query(AutomationSprintDB).filter(AutomationSprintDB.id == sprint_id).first()
-    if not sprint:
-        raise HTTPException(status_code=404, detail="Sprint not found")
-
+    sprint = _verify_sprint_access(db, sprint_id, current_user)
     return _sprint_to_response(sprint)
 
 
@@ -1420,12 +1451,10 @@ async def update_sprint(
     sprint_id: str,
     data: SprintUpdate,
     db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Update and reschedule sprint dates, name, or status."""
-    sprint = db.query(AutomationSprintDB).filter(AutomationSprintDB.id == sprint_id).first()
-    if not sprint:
-        raise HTTPException(status_code=404, detail="Sprint not found")
+    sprint = _verify_sprint_access(db, sprint_id, current_user)
 
     if data.name is not None:
         sprint.name = data.name
@@ -1487,12 +1516,10 @@ async def update_sprint(
 async def push_sprint_to_jira(
     sprint_id: str,
     db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Explicitly create and sync a local sprint in Jira Cloud."""
-    sprint = db.query(AutomationSprintDB).filter(AutomationSprintDB.id == sprint_id).first()
-    if not sprint:
-        raise HTTPException(status_code=404, detail="Sprint not found")
+    sprint = _verify_sprint_access(db, sprint_id, current_user)
 
     proj = sprint.project
     if not proj:
@@ -1527,12 +1554,10 @@ async def push_sprint_to_jira(
 async def delete_sprint(
     sprint_id: str,
     db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Delete sprint and cascade tasks."""
-    sprint = db.query(AutomationSprintDB).filter(AutomationSprintDB.id == sprint_id).first()
-    if not sprint:
-        raise HTTPException(status_code=404, detail="Sprint not found")
+    sprint = _verify_sprint_access(db, sprint_id, current_user)
 
     if sprint.jira_sprint_id:
         proj = sprint.project
@@ -1552,12 +1577,10 @@ async def delete_sprint(
 async def start_sprint(
     sprint_id: str,
     db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Explicitly start sprint immediately in Jira Agile and create initial tasks."""
-    sprint = db.query(AutomationSprintDB).filter(AutomationSprintDB.id == sprint_id).first()
-    if not sprint:
-        raise HTTPException(status_code=404, detail="Sprint not found")
+    sprint = _verify_sprint_access(db, sprint_id, current_user)
     proj = sprint.project
     if not proj:
         raise HTTPException(status_code=400, detail="Sprint has no associated project")
@@ -1578,12 +1601,10 @@ async def start_sprint(
 async def close_sprint(
     sprint_id: str,
     db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Explicitly close sprint in Jira Agile. Incomplete tasks move to backlog."""
-    sprint = db.query(AutomationSprintDB).filter(AutomationSprintDB.id == sprint_id).first()
-    if not sprint:
-        raise HTTPException(status_code=404, detail="Sprint not found")
+    sprint = _verify_sprint_access(db, sprint_id, current_user)
     proj = sprint.project
     if not proj:
         raise HTTPException(status_code=400, detail="Sprint has no associated project")
@@ -1604,12 +1625,10 @@ async def close_sprint(
 async def trigger_sprint_start(
     project_id: str,
     db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Manually trigger sprint start evaluation for a project."""
-    proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="Project not found")
+    proj = _verify_project_access(db, project_id, current_user)
     jira = get_jira_client_for_project(proj)
     if not jira:
         raise HTTPException(status_code=400, detail="Jira credentials not configured")
@@ -1621,12 +1640,10 @@ async def trigger_sprint_start(
 async def trigger_moves(
     project_id: str,
     db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Manually trigger move processing for a project."""
-    proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="Project not found")
+    proj = _verify_project_access(db, project_id, current_user)
     jira = get_jira_client_for_project(proj)
     if not jira:
         raise HTTPException(status_code=400, detail="Jira credentials not configured")
@@ -1638,12 +1655,10 @@ async def trigger_moves(
 async def trigger_sprint_close(
     project_id: str,
     db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Manually trigger sprint close evaluation for a project."""
-    proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="Project not found")
+    proj = _verify_project_access(db, project_id, current_user)
     jira = get_jira_client_for_project(proj)
     if not jira:
         raise HTTPException(status_code=400, detail="Jira credentials not configured")
@@ -1659,12 +1674,10 @@ async def create_task(
     sprint_id: str,
     data: TaskCreate,
     db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Create a new automation task with scheduled status transitions."""
-    sprint = db.query(AutomationSprintDB).filter(AutomationSprintDB.id == sprint_id).first()
-    if not sprint:
-        raise HTTPException(status_code=404, detail="Sprint not found")
+    sprint = _verify_sprint_access(db, sprint_id, current_user)
 
     assignee_id = data.assignee_id
     if not assignee_id:
@@ -1775,12 +1788,10 @@ async def create_task(
 async def get_task(
     task_id: str,
     db: Session = Depends(get_db),
-    _: UserDB | None = Depends(get_current_user_optional),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Get task details and its scheduled moves."""
-    task = db.query(AutomationTaskDB).filter(AutomationTaskDB.id == task_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    task = _verify_task_access(db, task_id, current_user)
     return _task_to_response(task)
 
 
@@ -1789,12 +1800,10 @@ async def update_task(
     task_id: str,
     data: TaskUpdate,
     db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Update task details."""
-    task = db.query(AutomationTaskDB).filter(AutomationTaskDB.id == task_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    task = _verify_task_access(db, task_id, current_user)
 
     if data.title is not None:
         task.title = data.title
@@ -1854,9 +1863,7 @@ async def update_task(
                     db.add(new_m)
 
     if data.sprint_id is not None and data.sprint_id != task.sprint_id:
-        target_sprint = db.query(AutomationSprintDB).filter(AutomationSprintDB.id == data.sprint_id).first()
-        if not target_sprint:
-            raise HTTPException(status_code=404, detail="Target sprint not found")
+        target_sprint = _verify_sprint_access(db, data.sprint_id, current_user)
         task.sprint_id = data.sprint_id
         if task.jira_issue_key and target_sprint.jira_sprint_id:
             proj = target_sprint.project
@@ -1896,15 +1903,11 @@ async def move_task_to_sprint(
     task_id: str,
     data: MoveTaskToSprintRequest,
     db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Move a task to a different sprint and sync with Jira if applicable."""
-    task = db.query(AutomationTaskDB).filter(AutomationTaskDB.id == task_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    target_sprint = db.query(AutomationSprintDB).filter(AutomationSprintDB.id == data.sprint_id).first()
-    if not target_sprint:
-        raise HTTPException(status_code=404, detail="Target sprint not found")
+    task = _verify_task_access(db, task_id, current_user)
+    target_sprint = _verify_sprint_access(db, data.sprint_id, current_user)
 
     task.sprint_id = data.sprint_id
 
@@ -1927,12 +1930,10 @@ async def move_task_to_sprint(
 async def delete_task(
     task_id: str,
     db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Delete task and scheduled transitions."""
-    task = db.query(AutomationTaskDB).filter(AutomationTaskDB.id == task_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    task = _verify_task_access(db, task_id, current_user)
 
     if task.jira_issue_key:
         proj = task.sprint.project if task.sprint else None
@@ -1953,12 +1954,10 @@ async def add_task_move(
     task_id: str,
     data: MoveCreate,
     db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Add a scheduled status move for an existing task."""
-    task = db.query(AutomationTaskDB).filter(AutomationTaskDB.id == task_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    _verify_task_access(db, task_id, current_user)
 
     move = TaskStatusMoveDB(
         task_id=task_id,
@@ -1985,11 +1984,12 @@ async def add_task_move(
 async def delete_task_move(
     move_id: str,
     db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Delete a scheduled move."""
     move = db.query(TaskStatusMoveDB).filter(TaskStatusMoveDB.id == move_id).first()
     if move:
+        _verify_task_access(db, move.task_id, current_user)
         db.delete(move)
         db.commit()
     return None
@@ -1998,76 +1998,14 @@ async def delete_task_move(
 # ==================== MANUAL TEST TRIGGERS ====================
 
 
-@router.post("/projects/{project_id}/trigger/sprint-start")
-async def trigger_sprint_start_manual(
-    project_id: str,
-    db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
-):
-    """Manually invoke sprint start checks for testing."""
-    proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    jira = get_jira_client_for_project(proj)
-    if not jira:
-        raise HTTPException(status_code=400, detail="Jira credentials are not configured")
-
-    now = datetime.now(UTC)
-    await process_sprint_starts(db, proj, jira, now)
-    return {"status": "ok", "message": "Sprint start check completed"}
-
-
-@router.post("/projects/{project_id}/trigger/sprint-close")
-async def trigger_sprint_close_manual(
-    project_id: str,
-    db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
-):
-    """Manually invoke sprint close checks for testing."""
-    proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    jira = get_jira_client_for_project(proj)
-    if not jira:
-        raise HTTPException(status_code=400, detail="Jira credentials are not configured")
-
-    now = datetime.now(UTC)
-    await process_sprint_closes(db, proj, jira, now)
-    return {"status": "ok", "message": "Sprint close check completed"}
-
-
-@router.post("/projects/{project_id}/trigger/moves")
-async def trigger_moves_manual(
-    project_id: str,
-    db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
-):
-    """Manually process task creations and status transitions for testing."""
-    proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    jira = get_jira_client_for_project(proj)
-    if not jira:
-        raise HTTPException(status_code=400, detail="Jira credentials are not configured")
-
-    now = datetime.now(UTC)
-    await process_moves(db, proj, jira, now)
-    return {"status": "ok", "message": "Status moves processed"}
-
-
 @router.post("/tasks/{task_id}/trigger-create")
 async def trigger_task_create_manual(
     task_id: str,
     db: Session = Depends(get_db),
-    _: UserDB = Depends(require_auth),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Immediately create this task in Jira and add to sprint."""
-    task = db.query(AutomationTaskDB).filter(AutomationTaskDB.id == task_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    task = _verify_task_access(db, task_id, current_user)
 
     sprint = task.sprint
     proj = sprint.project if sprint else None
@@ -2159,8 +2097,9 @@ async def agent_chat(
     """Planner Agent: Analyzes user prompt and generates a structured draft plan."""
     creds = current_user.credentials if hasattr(current_user, "credentials") else None
     user_gemini_key = decrypt_secret(creds.gemini_api_key_encrypted) if (creds and creds.gemini_api_key_encrypted) else None
-    
-    if not user_gemini_key:
+
+    # In Jira Automation, only Admin can fallback to global server key; students/pro_students must BYOK
+    if not user_gemini_key and current_user.role == "admin":
         settings = get_settings()
         if settings.gemini_api_key:
             user_gemini_key = settings.gemini_api_key
@@ -2168,18 +2107,13 @@ async def agent_chat(
     if not user_gemini_key:
         raise HTTPException(
             status_code=400,
-            detail="Gemini API Key is not configured. Please add your personal Gemini token in your User Profile first."
+            detail="Personal Gemini API Key is required for Jira Automation. Please add your personal Gemini token in your User Profile (Credentials & BYOK)."
         )
 
     from app.core.ai_credentials import normalize_gemini_model
     model_name = normalize_gemini_model(creds.gemini_model if creds else None)
 
-    project = None
-    if payload.project_id:
-        project = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == payload.project_id).first()
-    if not project:
-        project = db.query(AutomationProjectDB).first()
-
+    project = _resolve_accessible_project(db, payload.project_id, current_user)
     if not project:
         raise HTTPException(
             status_code=404,
@@ -2291,12 +2225,7 @@ async def agent_execute_plan(
     db: Session = Depends(get_db),
 ):
     """Execute and persist an approved AI-generated sprint, task, and status moves plan."""
-    project = None
-    if payload.project_id:
-        project = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == payload.project_id).first()
-    if not project:
-        project = db.query(AutomationProjectDB).first()
-
+    project = _resolve_accessible_project(db, payload.project_id, current_user)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -2452,9 +2381,19 @@ async def agent_execute_plan(
 
         matched_task = None
         if existing_t_id:
-            matched_task = db.query(AutomationTaskDB).filter(AutomationTaskDB.id == existing_t_id).first()
+            matched_task = (
+                db.query(AutomationTaskDB)
+                .join(AutomationSprintDB, AutomationTaskDB.sprint_id == AutomationSprintDB.id)
+                .filter(AutomationSprintDB.project_id == project.id, AutomationTaskDB.id == existing_t_id)
+                .first()
+            )
         if not matched_task and jira_key:
-            matched_task = db.query(AutomationTaskDB).filter(AutomationTaskDB.jira_issue_key == jira_key).first()
+            matched_task = (
+                db.query(AutomationTaskDB)
+                .join(AutomationSprintDB, AutomationTaskDB.sprint_id == AutomationSprintDB.id)
+                .filter(AutomationSprintDB.project_id == project.id, AutomationTaskDB.jira_issue_key == jira_key)
+                .first()
+            )
         if not matched_task and action == "update" and t_data.get("title"):
             matched_task = (
                 db.query(AutomationTaskDB)
@@ -2506,7 +2445,11 @@ async def agent_execute_plan(
                 sp_temp_id = t_data.get("sprint_temp_id")
                 new_sp_id = sprint_mapping.get(sp_temp_id) if sp_temp_id else (t_data.get("existing_sprint_id") or t_data.get("sprint_id"))
                 if new_sp_id and new_sp_id != db_task.sprint_id:
-                    new_sp = db.query(AutomationSprintDB).filter(AutomationSprintDB.id == new_sp_id).first()
+                    new_sp = (
+                        db.query(AutomationSprintDB)
+                        .filter(AutomationSprintDB.id == new_sp_id, AutomationSprintDB.project_id == project.id)
+                        .first()
+                    )
                     if new_sp:
                         db_task.sprint_id = new_sp.id
                         if db_task.jira_issue_key and new_sp.jira_sprint_id and jira:
@@ -2547,6 +2490,13 @@ async def agent_execute_plan(
         existing_sp_id = t_data.get("existing_sprint_id") or t_data.get("sprint_id")
 
         target_sp_id = sprint_mapping.get(sp_temp_id) if sp_temp_id else existing_sp_id
+        if target_sp_id:
+            valid_sp = (
+                db.query(AutomationSprintDB)
+                .filter(AutomationSprintDB.id == target_sp_id, AutomationSprintDB.project_id == project.id)
+                .first()
+            )
+            target_sp_id = valid_sp.id if valid_sp else None
         if not target_sp_id:
             first_sp = db.query(AutomationSprintDB).filter(AutomationSprintDB.project_id == project.id).first()
             target_sp_id = first_sp.id if first_sp else None
@@ -2670,12 +2620,21 @@ async def agent_execute_plan(
         created_tasks_count += 1
 
     # Process Moves
+    project_task_ids = {
+        t.id
+        for t in (
+            db.query(AutomationTaskDB.id)
+            .join(AutomationSprintDB, AutomationTaskDB.sprint_id == AutomationSprintDB.id)
+            .filter(AutomationSprintDB.project_id == project.id)
+            .all()
+        )
+    }
     tasks_with_new_moves = set()
     for m_data in plan.get("moves", []):
         t_temp_id = m_data.get("task_temp_id")
         existing_t_id = m_data.get("existing_task_id") or m_data.get("task_id")
         target_task_id = task_mapping.get(t_temp_id) if t_temp_id else (task_mapping.get(existing_t_id) or existing_t_id)
-        if target_task_id:
+        if target_task_id and target_task_id in project_task_ids:
             tasks_with_new_moves.add(target_task_id)
 
     # Clear pending moves for tasks getting new moves
@@ -2690,7 +2649,7 @@ async def agent_execute_plan(
         existing_t_id = m_data.get("existing_task_id") or m_data.get("task_id")
 
         target_task_id = task_mapping.get(t_temp_id) if t_temp_id else (task_mapping.get(existing_t_id) or existing_t_id)
-        if not target_task_id:
+        if not target_task_id or target_task_id not in project_task_ids:
             continue
 
         status_name = m_data.get("status")
