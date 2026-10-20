@@ -53,11 +53,14 @@ class EmbeddingService:
         settings = get_settings()
 
         # 1. Try Gemini Embeddings (gemini-embedding-001)
-        if settings.gemini_api_key:
+        from app.core.ai_credentials import get_system_ai_credentials
+        system_gemini_key, _ = get_system_ai_credentials()
+        gemini_key = settings.gemini_api_key or system_gemini_key
+        if gemini_key:
             try:
                 from google import genai
                 from google.genai import types
-                client = genai.Client(api_key=settings.gemini_api_key)
+                client = genai.Client(api_key=gemini_key)
                 response = client.models.embed_content(
                     model="gemini-embedding-001",
                     contents=clean_text[:4000],

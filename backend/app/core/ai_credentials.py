@@ -3,6 +3,7 @@ AI Credentials Resolver (BYOK - Bring Your Own Key Architecture).
 Resolves API keys and model preferences:
 1. User-specific custom credentials (encrypted in DB) take highest precedence.
 2. Global system settings (environment variables / config.json) serve as fallback.
+3. If environment keys are empty, fallback to the Admin's configured credentials in DB.
 """
 from dataclasses import dataclass
 from typing import Any
@@ -23,6 +24,49 @@ class ResolvedAIConfig:
     has_custom_keys: bool
 
 
+def get_system_ai_credentials(db: Any | None = None) -> tuple[str | None, str | None]:
+    """
+    Get system-wide fallback Gemini and OpenAI keys.
+    Checks Settings (env/config.json), and if empty, checks Admin's stored credentials in DB.
+    """
+    settings = get_settings()
+    gemini_key = settings.gemini_api_key or None
+    openai_key = settings.openai_api_key or None
+
+    if not gemini_key or not openai_key:
+        try:
+            from app.core.database import SessionLocal
+
+            should_close = False
+            session = db
+            if session is None:
+                session = SessionLocal()
+                should_close = True
+
+            admin_user = (
+                session.query(UserDB)
+                .filter(UserDB.role == "admin")
+                .order_by(UserDB.id.asc())
+                .first()
+            )
+            if admin_user and admin_user.credentials:
+                if not gemini_key and admin_user.credentials.gemini_api_key_encrypted:
+                    decrypted = decrypt_secret(admin_user.credentials.gemini_api_key_encrypted)
+                    if decrypted:
+                        gemini_key = decrypted
+                if not openai_key and admin_user.credentials.openai_api_key_encrypted:
+                    decrypted = decrypt_secret(admin_user.credentials.openai_api_key_encrypted)
+                    if decrypted:
+                        openai_key = decrypted
+
+            if should_close:
+                session.close()
+        except Exception:
+            pass
+
+    return gemini_key, openai_key
+
+
 def normalize_gemini_model(model: str | None) -> str:
     if not model:
         return "gemini-flash-lite-latest"
@@ -30,6 +74,12 @@ def normalize_gemini_model(model: str | None) -> str:
     if m.startswith("models/"):
         m = m[7:]
     m_lower = m.lower()
+
+    # Legacy/deprecated aliases that Google API no longer serves
+    if m_lower in ("gemini-2.0-flash-lite", "gemini-2.5-flash-lite", "gemini-flash-lite"):
+        return "gemini-flash-lite-latest"
+    if m_lower in ("gemini-2.0-flash", "gemini-2.5-flash", "gemini-flash"):
+        return "gemini-flash-latest"
 
     # Match Lite models (super cheap & eco)
     if "lite" in m_lower or m_lower in (
@@ -56,13 +106,14 @@ def normalize_gemini_model(model: str | None) -> str:
 
 
 
-def resolve_user_ai_config(user: UserDB | None = None) -> ResolvedAIConfig:
+def resolve_user_ai_config(user: UserDB | None = None, db: Any | None = None) -> ResolvedAIConfig:
     """
     Resolve effective AI engines, keys, and model parameters for the given user.
-    Falls back gracefully to system settings if the user has not configured personal credentials.
+    Falls back gracefully to system settings and admin-stored credentials.
     """
     settings = get_settings()
     creds = getattr(user, "credentials", None) if user else None
+    system_gemini_key, system_openai_key = get_system_ai_credentials(db=db)
 
     # Determine engines
     summarization_engine = (
@@ -102,21 +153,21 @@ def resolve_user_ai_config(user: UserDB | None = None) -> ResolvedAIConfig:
 
     # Resolve summarization key & model
     if summarization_engine == "gemini":
-        summarization_key = user_gemini_key or settings.gemini_api_key
+        summarization_key = user_gemini_key or system_gemini_key or settings.gemini_api_key
         summarization_model = gemini_model
     elif summarization_engine == "openai":
-        summarization_key = user_openai_key or settings.openai_api_key
+        summarization_key = user_openai_key or system_openai_key or settings.openai_api_key
         summarization_model = openai_model
     else:
-        summarization_key = user_gemini_key or settings.gemini_api_key
+        summarization_key = user_gemini_key or system_gemini_key or settings.gemini_api_key
         summarization_model = gemini_model
 
     # Resolve transcription key & model
     if transcription_engine == "gemini":
-        transcription_key = user_gemini_key or settings.gemini_api_key
+        transcription_key = user_gemini_key or system_gemini_key or settings.gemini_api_key
         transcription_model = gemini_model
     elif transcription_engine == "openai":
-        transcription_key = user_openai_key or settings.openai_api_key
+        transcription_key = user_openai_key or system_openai_key or settings.openai_api_key
         transcription_model = openai_model
     else:  # local_whisper
         transcription_key = None

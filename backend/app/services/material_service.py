@@ -323,7 +323,9 @@ AVAILABLE LECTURE ASSETS & CONTEXT:
 Generate the Master Study Summary JSON. Follow the short Executive Overview at top, prominent Tasks & Action Items for Next Lecture, and rich deep academic foundations below in markdown_content."""
 
     settings = get_settings()
-    key = settings.gemini_api_key if settings.summarization_engine == "gemini" else settings.openai_api_key
+    from app.core.ai_credentials import get_system_ai_credentials
+    sys_gemini, sys_openai = get_system_ai_credentials()
+    key = (settings.gemini_api_key or sys_gemini) if settings.summarization_engine == "gemini" else (settings.openai_api_key or sys_openai)
     model = settings.gemini_model if settings.summarization_engine == "gemini" else settings.openai_model
     agent = SummarizerAgent(engine=settings.summarization_engine, api_key=key, model=model)
 

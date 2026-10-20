@@ -43,46 +43,59 @@ class StudyAgentService:
     """
 
     @staticmethod
-    def get_llm(token_saver: bool = False, user: Any | None = None):
-        from app.core.ai_credentials import resolve_user_ai_config
+    def get_llm(token_saver: bool = False, user: Any | None = None, db: Any | None = None):
+        from app.core.ai_credentials import (
+            get_system_ai_credentials,
+            normalize_gemini_model,
+            resolve_user_ai_config,
+        )
         from app.core.config import get_settings
         settings = get_settings()
 
-        ai_config = resolve_user_ai_config(user)
+        ai_config = resolve_user_ai_config(user, db=db)
         user_role = getattr(user, "role", "student")
+        system_gemini_key, system_openai_key = get_system_ai_credentials(db=db)
 
         # In Meeting App / Study Hub, pro_student uses the admin-configured system key
         if user_role == "pro_student":
-            effective_key = settings.gemini_api_key or ai_config.summarization_api_key
+            effective_gemini_key = system_gemini_key or settings.gemini_api_key or ai_config.summarization_api_key
+            effective_openai_key = system_openai_key or settings.openai_api_key or ai_config.summarization_api_key
         else:
-            effective_key = ai_config.summarization_api_key or settings.gemini_api_key
+            effective_gemini_key = ai_config.summarization_api_key or system_gemini_key or settings.gemini_api_key
+            effective_openai_key = ai_config.summarization_api_key or system_openai_key or settings.openai_api_key
 
         max_tokens = 600 if token_saver else None
         if ai_config.summarization_engine == "gemini":
+            if not effective_gemini_key:
+                raise ValueError("Gemini API key is not configured on this server. Please contact an administrator.")
             from langchain_google_genai import ChatGoogleGenerativeAI
             kwargs: dict[str, Any] = {
-                "model": ai_config.summarization_model or "gemini-flash-latest",
-                "google_api_key": effective_key,
+                "model": normalize_gemini_model(ai_config.summarization_model),
+                "google_api_key": effective_gemini_key,
                 "temperature": 0.2,
             }
             if max_tokens:
                 kwargs["max_output_tokens"] = max_tokens
             return ChatGoogleGenerativeAI(**kwargs)
         elif ai_config.summarization_engine == "openai":
+            if not effective_openai_key:
+                raise ValueError("OpenAI API key is not configured on this server. Please contact an administrator.")
             from langchain_openai import ChatOpenAI
             kwargs = {
                 "model": ai_config.summarization_model or "gpt-4o",
-                "api_key": effective_key,
+                "api_key": effective_openai_key,
                 "temperature": 0.2,
             }
             if max_tokens:
                 kwargs["max_tokens"] = max_tokens
             return ChatOpenAI(**kwargs)
         else:
+            if not effective_gemini_key:
+                raise ValueError("Gemini API key is not configured on this server. Please contact an administrator.")
             from langchain_google_genai import ChatGoogleGenerativeAI
             kwargs = {
                 "model": "gemini-flash-latest",
-                "google_api_key": effective_key,
+                "google_api_key": effective_gemini_key,
                 "temperature": 0.2,
             }
             if max_tokens:
@@ -409,6 +422,14 @@ COMMUNICATION STYLE:
     def load_thread_history(cls, db: Session, thread_id: str) -> list[BaseMessage]:
         """Loads persistent message history from AgentCheckpointDB."""
         latest_cp = AgentCheckpointer.get_latest_checkpoint(db, thread_id)
+        if (not latest_cp or not latest_cp.state) and thread_id.startswith("u_"):
+            parts = thread_id.split("_", 2)
+            if len(parts) >= 3:
+                legacy_thread_id = parts[2]
+                legacy_cp = AgentCheckpointer.get_latest_checkpoint(db, legacy_thread_id)
+                if legacy_cp and legacy_cp.state:
+                    latest_cp = legacy_cp
+
         if not latest_cp or not latest_cp.state:
             return []
 
@@ -513,8 +534,19 @@ COMMUNICATION STYLE:
             user=user,
         )
 
-        llm = cls.get_llm(token_saver=token_saver, user=user)
-        llm_with_tools = llm.bind_tools(tools)
+        try:
+            llm = cls.get_llm(token_saver=token_saver, user=user, db=db)
+            llm_with_tools = llm.bind_tools(tools)
+        except Exception as e:
+            logger.error(f"Failed to initialize LLM: {e}")
+            return {
+                "response": f"⚠️ AI Assistant unavailable: {e}",
+                "thread_id": effective_thread_id,
+                "actions_taken": [],
+                "updated_summary": None,
+                "token_saver": token_saver,
+                "suggested_actions": [],
+            }
 
         def call_model(state: MessagesState):
             messages = state["messages"]
@@ -622,6 +654,14 @@ COMMUNICATION STYLE:
     def get_history(cls, db: Session, thread_id: str) -> list[dict[str, Any]]:
         """Retrieve formatted message history for UI hydration."""
         latest_cp = AgentCheckpointer.get_latest_checkpoint(db, thread_id)
+        if (not latest_cp or not latest_cp.state) and thread_id.startswith("u_"):
+            parts = thread_id.split("_", 2)
+            if len(parts) >= 3:
+                legacy_thread_id = parts[2]
+                legacy_cp = AgentCheckpointer.get_latest_checkpoint(db, legacy_thread_id)
+                if legacy_cp and legacy_cp.state:
+                    latest_cp = legacy_cp
+
         if not latest_cp or not latest_cp.state:
             return []
         return latest_cp.state.get("messages", [])
