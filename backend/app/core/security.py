@@ -192,3 +192,14 @@ def require_admin(user: Any = Depends(get_current_user)) -> Any:
         )
     return user
 
+
+def require_pro_or_admin(user: Any = Depends(get_current_user)) -> Any:
+    """Dependency that ensures the authenticated user is a pro_student or admin."""
+    if user.role not in ("admin", "pro_student"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Pro Student or Admin privileges required for AI study chat."
+        )
+    return user
+
+

@@ -20,8 +20,7 @@ interface LectureDrawerProps {
 }
 
 export const LectureDrawer: React.FC<LectureDrawerProps> = ({ onOpenRecorderForLecture }) => {
-  const { currentUser } = useAuthViewModel();
-  const isAdmin = currentUser?.role === "admin";
+  const { isAdmin, hasChatAccess } = useAuthViewModel();
   const {
     lecture,
     meeting,
@@ -38,10 +37,10 @@ export const LectureDrawer: React.FC<LectureDrawerProps> = ({ onOpenRecorderForL
   const [chatInput, setChatInput] = useState("");
 
   useEffect(() => {
-    if (!isAdmin && activeTab === "chat") {
+    if (!hasChatAccess && activeTab === "chat") {
       setActiveTab("summary");
     }
-  }, [isAdmin, activeTab, setActiveTab]);
+  }, [hasChatAccess, activeTab, setActiveTab]);
 
   if (!isOpen || !lecture) return null;
 
@@ -197,7 +196,7 @@ export const LectureDrawer: React.FC<LectureDrawerProps> = ({ onOpenRecorderForL
             <span>Transcript</span>
           </button>
 
-          {isAdmin && (
+          {hasChatAccess && (
             <button
               onClick={() => setActiveTab("chat")}
               className={`py-3 px-4 text-xs font-bold border-b-2 flex items-center space-x-2 transition ${

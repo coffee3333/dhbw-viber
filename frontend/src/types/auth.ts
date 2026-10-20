@@ -1,9 +1,11 @@
+export type UserRole = "admin" | "pro_student" | "student" | "member";
+
 export interface UserProfile {
   id: string;
   username: string;
   email?: string | null;
   display_name: string;
-  role: "admin" | "member";
+  role: UserRole;
   telegram_username?: string | null;
   telegram_chat_id?: string | null;
   telegram_connected?: boolean;
@@ -72,6 +74,6 @@ export interface AdminCreateUserRequest {
   username: string;
   display_name?: string;
   password: string;
-  role: "admin" | "member";
+  role: UserRole;
   email?: string;
 }

@@ -22,7 +22,7 @@ class UserDB(Base):
     email = Column(String(255), unique=True, nullable=True, index=True)
     display_name = Column(String(100), nullable=False)
     password_hash = Column(String(255), nullable=False)
-    role = Column(String(20), default="member")  # "admin" or "member"
+    role = Column(String(20), default="student")  # "admin", "pro_student", "student"
     telegram_chat_id = Column(String(50), nullable=True, index=True)
     telegram_username = Column(String(100), nullable=True)
     is_active = Column(Boolean, default=True)

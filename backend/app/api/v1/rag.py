@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.ai_credentials import resolve_user_ai_config
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.core.security import get_current_user_optional
+from app.core.security import get_current_user_optional, require_admin
 from app.models.db import LectureDB, LectureKnowledgeChunkDB, SubjectDB
 from app.models.user import UserDB
 from app.services.rag_service import GrillAgent, RagService
@@ -39,12 +39,11 @@ class SearchRequest(BaseModel):
 @router.post("/grill-me")
 def grill_me(
     req: GrillMeRequest,
-    request: Request,
+    admin: UserDB = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    """Generate a rigorous exam/quiz question grounded in lecture notes & AI summaries."""
-    current_user: UserDB | None = get_current_user_optional(request, db)
-    ai_config = resolve_user_ai_config(current_user)
+    """Generate a rigorous exam/quiz question grounded in lecture notes & AI summaries. Admin only."""
+    ai_config = resolve_user_ai_config(admin)
 
     subject_name = "Computer Science"
     lecture_title = None
@@ -104,12 +103,11 @@ def grill_me(
 @router.post("/evaluate")
 def evaluate_student_answer(
     req: EvaluateRequest,
-    request: Request,
+    admin: UserDB = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    """Grade and critique the student's answer against the lecture knowledge."""
-    current_user: UserDB | None = get_current_user_optional(request, db)
-    ai_config = resolve_user_ai_config(current_user)
+    """Grade and critique the student's answer against the lecture knowledge. Admin only."""
+    ai_config = resolve_user_ai_config(admin)
 
     subject_name = "Computer Science"
     if req.lecture_id:

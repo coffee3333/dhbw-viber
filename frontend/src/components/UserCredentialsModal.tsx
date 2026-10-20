@@ -61,6 +61,7 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
     updateProfile,
     updateCredentials,
     adminCreateUser,
+    adminUpdateUserRole,
     adminDeleteUser,
     logout,
   } = useAuthViewModel();
@@ -126,7 +127,7 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
   const [newUsername, setNewUsername] = useState("");
   const [newDisplayName, setNewDisplayName] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
-  const [newUserRole, setNewUserRole] = useState<"member" | "admin">("member");
+  const [newUserRole, setNewUserRole] = useState<"student" | "pro_student" | "admin">("student");
   const [isCreatingUser, setIsCreatingUser] = useState(false);
 
   useEffect(() => {
@@ -379,6 +380,16 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
       await loadUsers();
     } catch (err: any) {
       showToast.error("Failed to delete user", err.response?.data?.detail || err.message);
+    }
+  };
+
+  const handleRoleChange = async (userId: string, targetRole: string) => {
+    try {
+      await adminUpdateUserRole(userId, targetRole);
+      showToast.success("Role Updated", `User role updated to ${targetRole.toUpperCase()}`);
+      await loadUsers();
+    } catch (err: any) {
+      showToast.error("Failed to update role", err.response?.data?.detail || err.message);
     }
   };
 
@@ -637,8 +648,8 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
                         <Bot className="w-4 h-4" />
                       </div>
                       <div>
-                        <h4 className="text-xs font-bold text-white">Google Gemini API Key</h4>
-                        <p className="text-[10px] text-slate-400">Powers MeetingAgent and Jira Sprint Planner</p>
+                        <h4 className="text-xs font-bold text-white">Google Gemini API Key (BYOK)</h4>
+                        <p className="text-[10px] text-slate-400">Powers your personal Jira Sprint Planning Agent. (In StudyHub, Pro Students use the central server key automatically)</p>
                       </div>
                     </div>
                     {credentials?.has_gemini_api_key ? (
@@ -1067,8 +1078,9 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
                       onChange={(e) => setNewUserRole(e.target.value as any)}
                       className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-100 cursor-pointer"
                     >
-                      <option value="member">Member (Developer / Tester)</option>
-                      <option value="admin">Administrator</option>
+                      <option value="student">Student (Reader only)</option>
+                      <option value="pro_student">Pro Student (Reader + AI Study Chat)</option>
+                      <option value="admin">Administrator (Full Access)</option>
                     </select>
                   </div>
                 </div>
@@ -1089,35 +1101,46 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
               <div className="space-y-2">
                 <h4 className="text-xs font-semibold text-slate-300">Existing Platform Users ({userList.length})</h4>
                 <div className="divide-y divide-slate-800 border border-slate-800 rounded-xl overflow-hidden bg-slate-900/40">
-                  {userList.map((u) => (
-                    <div key={u.id} className="p-3 flex items-center justify-between text-xs">
-                      <div>
-                        <div className="font-semibold text-slate-200">{u.display_name}</div>
-                        <div className="text-slate-400 text-[11px]">@{u.username}</div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <span
-                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                            u.role === "admin"
-                              ? "bg-purple-950/60 text-purple-300 border-purple-500/30"
-                              : "bg-slate-800 text-slate-300 border-slate-700"
-                          }`}
-                        >
-                          {u.role.toUpperCase()}
-                        </span>
-                        {u.id !== currentUser?.id && (
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteUser(u.id, u.username)}
-                            className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
-                            title="Delete user"
+                  {userList.map((u) => {
+                    const normalizedRole = u.role === "member" ? "student" : u.role;
+                    return (
+                      <div key={u.id} className="p-3 flex items-center justify-between text-xs">
+                        <div>
+                          <div className="font-semibold text-slate-200">{u.display_name}</div>
+                          <div className="text-slate-400 text-[11px]">@{u.username}</div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <select
+                            value={normalizedRole}
+                            disabled={u.id === currentUser?.id}
+                            onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                            className={`text-[10px] font-semibold px-2 py-0.5 rounded-lg border cursor-pointer disabled:cursor-not-allowed ${
+                              normalizedRole === "admin"
+                                ? "bg-purple-950/80 text-purple-300 border-purple-500/40"
+                                : normalizedRole === "pro_student"
+                                ? "bg-indigo-950/80 text-indigo-300 border-indigo-500/40"
+                                : "bg-slate-800 text-slate-300 border-slate-700"
+                            }`}
+                            title={u.id === currentUser?.id ? "Cannot change your own role" : "Change user role"}
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                            <option value="student">STUDENT (READER)</option>
+                            <option value="pro_student">PRO STUDENT (AI CHAT)</option>
+                            <option value="admin">ADMIN (FULL ACCESS)</option>
+                          </select>
+                          {u.id !== currentUser?.id && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteUser(u.id, u.username)}
+                              className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
+                              title="Delete user"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {userList.length === 0 && !isLoadingUsers && (
                     <div className="p-4 text-center text-xs text-slate-500">No users found.</div>
                   )}

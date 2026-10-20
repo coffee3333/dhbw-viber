@@ -39,7 +39,7 @@ logger = get_logger("meeting_agent.jira_api")
 router = APIRouter(
     prefix="/jira-automation",
     tags=["jira-automation"],
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_auth)],
 )
 
 
@@ -378,7 +378,7 @@ def _sprint_to_response(sprint: AutomationSprintDB) -> SprintResponse:
 @router.post("/test-credentials")
 async def test_credentials(
     data: TestCredentialsRequest,
-    current_user: UserDB = Depends(require_admin),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Test connection and discover projects & boards with raw credentials before saving."""
     if not data.jira_domain or not data.jira_email or not data.jira_api_token:
@@ -458,9 +458,9 @@ async def list_projects(
 async def create_project(
     data: ProjectCreate,
     db: Session = Depends(get_db),
-    current_user: UserDB = Depends(require_admin),
+    current_user: UserDB = Depends(get_current_user),
 ):
-    """Admin-only: Create a new Jira & Git automation project."""
+    """Create a new Jira & Git automation project. Accessible to any team member."""
     proj = AutomationProjectDB(
         name=data.name,
         description=data.description,
@@ -479,6 +479,16 @@ async def create_project(
         is_active=data.is_active,
     )
     db.add(proj)
+    db.commit()
+    db.refresh(proj)
+
+    # Automatically add creator as lead project member
+    member = ProjectMemberDB(
+        project_id=proj.id,
+        user_id=current_user.id,
+        role_in_project="lead"
+    )
+    db.add(member)
     db.commit()
     db.refresh(proj)
 
@@ -525,7 +535,7 @@ async def get_project_agent_guide(
     request: Request,
     origin: str | None = Query(None, description="Optional client origin to override base URL"),
     db: Session = Depends(get_db),
-    current_user: UserDB = Depends(require_admin),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Retrieve dynamically generated AGENTS.md and CLAUDE.md integration guides for a specific project."""
     proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
@@ -565,7 +575,7 @@ async def get_general_agent_guide(
     project_id: str | None = Query(None, description="Optional project ID"),
     origin: str | None = Query(None, description="Optional client origin to override base URL"),
     db: Session = Depends(get_db),
-    current_user: UserDB = Depends(require_admin),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Retrieve dynamically generated AGENTS.md and CLAUDE.md integration guides."""
     proj = None
@@ -604,12 +614,17 @@ async def update_project(
     project_id: str,
     data: ProjectUpdate,
     db: Session = Depends(get_db),
-    current_user: UserDB = Depends(require_admin),
+    current_user: UserDB = Depends(get_current_user),
 ):
-    """Admin-only: Update project configurations."""
+    """Update project configurations. Accessible to Admins and project members."""
     proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
     if not proj:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    is_member = any(m.user_id == current_user.id for m in proj.members)
+    if current_user.role != "admin" and not is_member:
+        raise HTTPException(status_code=403, detail="Forbidden: You must be an administrator or a project member.")
+
 
     if data.name is not None:
         proj.name = data.name
@@ -661,12 +676,17 @@ async def update_project(
 async def delete_project(
     project_id: str,
     db: Session = Depends(get_db),
-    current_user: UserDB = Depends(require_admin),
+    current_user: UserDB = Depends(get_current_user),
 ):
-    """Admin-only: Delete an automation project and its cascading resources."""
+    """Delete an automation project and its cascading resources. Accessible to Admins and project leads."""
     proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
     if not proj:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    is_lead = any(m.user_id == current_user.id and m.role_in_project == "lead" for m in proj.members)
+    if current_user.role != "admin" and not is_lead:
+        raise HTTPException(status_code=403, detail="Forbidden: You must be an administrator or project lead to delete this project.")
+
     db.delete(proj)
     db.commit()
     return None
@@ -858,12 +878,17 @@ async def add_project_member(
     project_id: str,
     data: MemberAdd,
     db: Session = Depends(get_db),
-    _: UserDB = Depends(require_admin),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Add a registered user to the automation project."""
     proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
     if not proj:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    is_lead = any(m.user_id == current_user.id and m.role_in_project == "lead" for m in proj.members)
+    if current_user.role != "admin" and not is_lead:
+        raise HTTPException(status_code=403, detail="Forbidden: You must be an administrator or project lead.")
+
 
     user = db.query(UserDB).filter(UserDB.id == data.user_id).first()
     if not user:
@@ -907,9 +932,17 @@ async def remove_project_member(
     project_id: str,
     user_id: str,
     db: Session = Depends(get_db),
-    _: UserDB = Depends(require_admin),
+    current_user: UserDB = Depends(get_current_user),
 ):
     """Remove a member from the project."""
+    proj = db.query(AutomationProjectDB).filter(AutomationProjectDB.id == project_id).first()
+    if not proj:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    is_lead = any(m.user_id == current_user.id and m.role_in_project == "lead" for m in proj.members)
+    if current_user.role != "admin" and not is_lead:
+        raise HTTPException(status_code=403, detail="Forbidden: You must be an administrator or project lead.")
+
     m = (
         db.query(ProjectMemberDB)
         .filter(ProjectMemberDB.project_id == project_id, ProjectMemberDB.user_id == user_id)

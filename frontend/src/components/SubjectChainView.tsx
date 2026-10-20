@@ -18,6 +18,7 @@ import {
 import type { SubjectDetail, LectureChainItem, CreateLecturePayload, UpdateLecturePayload } from "../types/calendar";
 import { AgentChatPanel } from "./AgentChatPanel";
 import { useCalendarViewModel } from "../viewmodels/useCalendarViewModel";
+import { useAuthViewModel } from "../viewmodels/useAuthViewModel";
 import { ClassModal } from "./ClassModal";
 import { showToast } from "../utils/toast";
 
@@ -34,6 +35,7 @@ export const SubjectChainView: React.FC<SubjectChainViewProps> = ({
   onSelectLecture,
 }) => {
   const { createLecture, updateLecture, deleteLecture } = useCalendarViewModel();
+  const { isAdmin, hasChatAccess } = useAuthViewModel();
 
   const [filterMode, setFilterMode] = useState<"all" | "upcoming" | "past" | "exceptions">("all");
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -135,14 +137,16 @@ export const SubjectChainView: React.FC<SubjectChainViewProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleOpenAddClass}
-            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md shadow-indigo-600/30 transition cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Class</span>
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={handleOpenAddClass}
+              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs flex items-center space-x-1.5 shadow-md shadow-indigo-600/30 transition cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Class</span>
+            </button>
+          )}
 
         </div>
 
@@ -445,24 +449,28 @@ export const SubjectChainView: React.FC<SubjectChainViewProps> = ({
                         {lec.title}
                       </h3>
                       <div className="flex items-center space-x-1 text-slate-400 group-hover:text-indigo-400 text-xs font-semibold">
-                        <span
-                          role="button"
-                          tabIndex={0}
-                          onClick={(e) => handleOpenEditClass(lec, e)}
-                          title="Edit Class Slot"
-                          className="p-1 rounded-md text-slate-400 hover:text-indigo-300 hover:bg-slate-800 transition cursor-pointer"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </span>
-                        <span
-                          role="button"
-                          tabIndex={0}
-                          onClick={(e) => handleDeleteClassDirect(lec, e)}
-                          title="Delete Class Slot"
-                          className="p-1 rounded-md text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </span>
+                        {isAdmin && (
+                          <>
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={(e) => handleOpenEditClass(lec, e)}
+                              title="Edit Class Slot"
+                              className="p-1 rounded-md text-slate-400 hover:text-indigo-300 hover:bg-slate-800 transition cursor-pointer"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </span>
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={(e) => handleDeleteClassDirect(lec, e)}
+                              title="Delete Class Slot"
+                              className="p-1 rounded-md text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </span>
+                          </>
+                        )}
                         <div className="flex items-center space-x-1 ml-1">
                           <span className="hidden sm:inline">Open Lesson</span>
                           <ArrowRight className="w-4 h-4 transform group-hover:translate-x-1 transition" />
@@ -509,14 +517,16 @@ export const SubjectChainView: React.FC<SubjectChainViewProps> = ({
         </div>
       </div>
 
-      {/* Right Side: Hideable Course-Wide AI Agent Chat Bar */}
-      <AgentChatPanel
-        scope="subject"
-        subjectId={subject.id}
-        subjectName={subject.name}
-        isOpen={isChatOpen}
-        onToggle={() => setIsChatOpen(!isChatOpen)}
-      />
+      {/* Right Side: Hideable Course-Wide AI Agent Chat Bar (Available only for Pro Student & Admin) */}
+      {hasChatAccess && (
+        <AgentChatPanel
+          scope="subject"
+          subjectId={subject.id}
+          subjectName={subject.name}
+          isOpen={isChatOpen}
+          onToggle={() => setIsChatOpen(!isChatOpen)}
+        />
+      )}
 
       {/* Class Create / Edit Modal */}
       <ClassModal

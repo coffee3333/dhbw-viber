@@ -106,6 +106,10 @@ export function useAuthViewModel() {
     return await authApi.adminCreateUser(payload);
   };
 
+  const adminUpdateUserRole = async (userId: string, role: string) => {
+    return await authApi.adminUpdateUserRole(userId, role);
+  };
+
   const adminDeleteUser = async (userId: string) => {
     return await authApi.adminDeleteUser(userId);
   };
@@ -120,10 +124,19 @@ export function useAuthViewModel() {
     }
   };
 
+  const isAdmin = currentUser?.role === "admin";
+  const isProStudent = currentUser?.role === "pro_student";
+  const isStudent = currentUser?.role === "student" || currentUser?.role === "member";
+  const hasChatAccess = isAdmin || isProStudent;
+
   return {
     authRequired,
     isAuthenticated,
     currentUser,
+    isAdmin,
+    isProStudent,
+    isStudent,
+    hasChatAccess,
     credentials,
     savedPassphrase,
     error,
@@ -136,6 +149,7 @@ export function useAuthViewModel() {
     updateProfile,
     updateCredentials,
     adminCreateUser,
+    adminUpdateUserRole,
     adminDeleteUser,
   };
 }

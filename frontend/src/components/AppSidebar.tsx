@@ -158,15 +158,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       {/* 1. TOP HEADER: App Switcher Dropdown */}
       <div className="h-16 px-3.5 border-b border-slate-800/80 bg-[#0f172a]/80 flex items-center justify-between relative" ref={switcherRef}>
         <button
-          onClick={isAdmin ? () => setIsAppSwitcherOpen(!isAppSwitcherOpen) : undefined}
-          className={`flex items-center space-x-3 text-left group overflow-hidden w-full py-1.5 px-1 rounded-xl transition ${
-            isAdmin ? "cursor-pointer hover:bg-slate-800/50" : "cursor-default"
-          }`}
-          title={isAdmin ? "Click to Switch Application" : "DHBW StudyHub"}
+          onClick={() => setIsAppSwitcherOpen(!isAppSwitcherOpen)}
+          className="flex items-center space-x-3 text-left group overflow-hidden w-full py-1.5 px-1 rounded-xl transition cursor-pointer hover:bg-slate-800/50"
+          title="Click to Switch Application"
         >
           {/* Dynamic App Logo */}
           <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0 ${isAdmin ? "group-hover:scale-105" : ""} transition-transform duration-200 ${
+            className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0 group-hover:scale-105 transition-transform duration-200 ${
               activeApp === "study_hub"
                 ? "bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 shadow-indigo-500/25"
                 : "bg-gradient-to-tr from-cyan-600 via-indigo-600 to-purple-600 shadow-indigo-600/30"
@@ -200,13 +198,11 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                   {activeApp === "study_hub" ? "DHBW Student Manager" : "Task Scheduler & Sync"}
                 </span>
               </div>
-              {isAdmin && (
-                <ChevronDown
-                  className={`w-4 h-4 text-slate-400 group-hover:text-white transition-transform ${
-                    isAppSwitcherOpen ? "rotate-180" : ""
-                  }`}
-                />
-              )}
+              <ChevronDown
+                className={`w-4 h-4 text-slate-400 group-hover:text-white transition-transform ${
+                  isAppSwitcherOpen ? "rotate-180" : ""
+                }`}
+              />
             </div>
           )}
         </button>

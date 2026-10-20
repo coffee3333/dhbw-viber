@@ -63,8 +63,7 @@ export const LectureSubSection: React.FC<LectureSubSectionProps> = ({
   onDeleteMaterial,
   onOpenRecorder,
 }) => {
-  const { currentUser } = useAuthViewModel();
-  const isAdmin = currentUser?.role === "admin";
+  const { isAdmin, hasChatAccess } = useAuthViewModel();
 
   const [activeTab, setActiveTab] = useState<"summary" | "recording" | "materials">("summary");
   
@@ -1271,19 +1270,21 @@ export const LectureSubSection: React.FC<LectureSubSectionProps> = ({
         </div>
       </div>
 
-      {/* Right Side: Hideable AI Lecture Agent Chat Bar */}
-      <AgentChatPanel
-        scope="lecture"
-        lectureId={lecture.id}
-        lectureTitle={lecture.title}
-        subjectId={subject.id}
-        subjectName={subject.name}
-        isOpen={isChatOpen}
-        onToggle={() => setIsChatOpen(!isChatOpen)}
-        onSummaryUpdated={(newMd) => {
-          setLiveSummaryOverride(newMd);
-        }}
-      />
+      {/* Right Side: Hideable AI Lecture Agent Chat Bar (Only for Pro Student & Admin) */}
+      {hasChatAccess && (
+        <AgentChatPanel
+          scope="lecture"
+          lectureId={lecture.id}
+          lectureTitle={lecture.title}
+          subjectId={subject.id}
+          subjectName={subject.name}
+          isOpen={isChatOpen}
+          onToggle={() => setIsChatOpen(!isChatOpen)}
+          onSummaryUpdated={isAdmin ? (newMd) => {
+            setLiveSummaryOverride(newMd);
+          } : undefined}
+        />
+      )}
     </div>
   );
 };

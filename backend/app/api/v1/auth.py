@@ -60,8 +60,13 @@ class AdminCreateUserRequest(BaseModel):
     username: str = Field(..., min_length=2)
     display_name: str | None = None
     password: str = Field(..., min_length=4)
-    role: str = "member"  # "admin" or "member"
+    role: str = "student"  # "admin", "pro_student", or "student"
     email: str | None = None
+
+
+class AdminUpdateUserRoleRequest(BaseModel):
+    role: str = Field(..., description="'admin', 'pro_student', or 'student'")
+
 
 
 @router.get("/status", response_model=AuthStatusResponse)
@@ -356,12 +361,16 @@ def create_user_by_admin(
     display_name = (payload.display_name or "").strip() or username_clean
     email_clean = payload.email.strip().lower() if payload.email and payload.email.strip() else None
 
+    target_role = payload.role.strip().lower() if payload.role else "student"
+    if target_role not in ["admin", "pro_student", "student"]:
+        target_role = "student"
+
     new_user = UserDB(
         username=username_clean,
         display_name=display_name,
         email=email_clean,
         password_hash=hash_password(payload.password),
-        role=payload.role if payload.role in ["admin", "member"] else "member",
+        role=target_role,
         is_active=True
     )
     db.add(new_user)
@@ -370,9 +379,35 @@ def create_user_by_admin(
 
     return {
         "success": True,
-        "message": f"User '{new_user.display_name}' (@{new_user.username}) registered successfully.",
+        "message": f"User '{new_user.display_name}' (@{new_user.username}) registered successfully with role '{new_user.role}'.",
         "user_id": new_user.id
     }
+
+
+@router.patch("/users/{user_id}/role")
+def update_user_role_by_admin(
+    user_id: str,
+    payload: AdminUpdateUserRoleRequest,
+    admin: UserDB = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Admin-only: Update a user's role (admin, pro_student, student)."""
+    target = db.query(UserDB).filter(UserDB.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    new_role = payload.role.strip().lower()
+    if new_role not in ["admin", "pro_student", "student"]:
+        raise HTTPException(status_code=400, detail="Invalid role. Must be 'admin', 'pro_student', or 'student'.")
+
+    if target.id == admin.id and new_role != "admin":
+        raise HTTPException(status_code=400, detail="Cannot demote your own admin account.")
+
+    target.role = new_role
+    db.commit()
+    db.refresh(target)
+    return {"success": True, "message": f"Role for '{target.display_name}' updated to '{target.role}'."}
+
 
 
 @router.delete("/users/{user_id}")

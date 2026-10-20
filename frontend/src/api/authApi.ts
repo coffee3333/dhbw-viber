@@ -63,6 +63,11 @@ export const authApi = {
     return res.data;
   },
 
+  async adminUpdateUserRole(userId: string, role: string): Promise<{ success: boolean; message: string }> {
+    const res = await apiClient.patch(`/auth/users/${userId}/role`, { role });
+    return res.data;
+  },
+
   async adminDeleteUser(userId: string): Promise<void> {
     await apiClient.delete(`/auth/users/${userId}`);
   },

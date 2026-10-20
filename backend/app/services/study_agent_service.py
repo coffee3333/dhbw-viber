@@ -45,13 +45,24 @@ class StudyAgentService:
     @staticmethod
     def get_llm(token_saver: bool = False, user: Any | None = None):
         from app.core.ai_credentials import resolve_user_ai_config
+        from app.core.config import get_settings
+        settings = get_settings()
+
         ai_config = resolve_user_ai_config(user)
+        user_role = getattr(user, "role", "student")
+
+        # In Meeting App / Study Hub, pro_student uses the admin-configured system key
+        if user_role == "pro_student":
+            effective_key = settings.gemini_api_key or ai_config.summarization_api_key
+        else:
+            effective_key = ai_config.summarization_api_key or settings.gemini_api_key
+
         max_tokens = 600 if token_saver else None
         if ai_config.summarization_engine == "gemini":
             from langchain_google_genai import ChatGoogleGenerativeAI
             kwargs: dict[str, Any] = {
                 "model": ai_config.summarization_model or "gemini-flash-latest",
-                "google_api_key": ai_config.summarization_api_key,
+                "google_api_key": effective_key,
                 "temperature": 0.2,
             }
             if max_tokens:
@@ -61,7 +72,7 @@ class StudyAgentService:
             from langchain_openai import ChatOpenAI
             kwargs = {
                 "model": ai_config.summarization_model or "gpt-4o",
-                "api_key": ai_config.summarization_api_key,
+                "api_key": effective_key,
                 "temperature": 0.2,
             }
             if max_tokens:
@@ -71,7 +82,7 @@ class StudyAgentService:
             from langchain_google_genai import ChatGoogleGenerativeAI
             kwargs = {
                 "model": "gemini-flash-latest",
-                "google_api_key": ai_config.summarization_api_key,
+                "google_api_key": effective_key,
                 "temperature": 0.2,
             }
             if max_tokens:
@@ -258,7 +269,12 @@ class StudyAgentService:
                 f"**Follow-up Question:**\n{followup}"
             )
 
-        tools: list[Any] = [search_knowledge_base, edit_lecture_summary, grill_me, evaluate_student_answer]
+        user_role = getattr(user, "role", "student")
+        if user_role == "admin":
+            tools: list[Any] = [search_knowledge_base, edit_lecture_summary, grill_me, evaluate_student_answer]
+        else:
+            # Pro students are in strict read-only Q&A mode: no summary editing, no Grill Me
+            tools: list[Any] = [search_knowledge_base]
 
         # Add course-level multi-lecture tools if scope is subject
         if scope == "subject":
@@ -318,6 +334,7 @@ class StudyAgentService:
         subject_name: str,
         student_notes: str | None,
         token_saver: bool = False,
+        user_role: str = "student",
     ) -> str:
         """Constructs authoritative persona and operational instructions for LangGraph."""
         economy_directive = ""
@@ -339,6 +356,15 @@ class StudyAgentService:
 
         notes_ctx = f'STUDENT NOTES CONTEXT:\n"""{student_notes}"""\n' if student_notes else ''
         if scope == "lecture":
+            admin_caps = """2. Edit Lecture Summary (`edit_lecture_summary`):
+   - If requested, call `edit_lecture_summary` to update the canonical summary.
+3. Exam Drill (`grill_me` and `evaluate_student_answer`):
+   - If requested, challenge with `/grill me` questions and evaluate answers."""
+            student_caps = """2. Student Q&A Consultation:
+   - Answer student questions, explain difficult concepts, and provide intuitive examples.
+   - You cannot edit canonical lecture summaries or execute exam drills."""
+            caps = admin_caps if user_role == "admin" else student_caps
+
             return f"""You are the dedicated Academic AI Tutor and Pair Programmer for the lecture:
 "{lecture_title or 'Current Lecture'}" in {subject_name}.
 {economy_directive}
@@ -346,12 +372,7 @@ YOUR CAPABILITIES & TOOLS:
 1. Knowledge Grounding (`search_knowledge_base`):
    - You have access to vector embeddings and full-text RAG of presentation slides (.pptx, .pdf), audio transcripts, uploaded markdown summaries, and timetable notes.
    - Always search the knowledge base when asked specific factual, theoretical, or code questions about this lecture.
-2. Edit Lecture Summary (`edit_lecture_summary`):
-   - If the student asks you to add something to the summary, rewrite sections, fix notes, or expand points, call `edit_lecture_summary`.
-   - Provide the complete new markdown for the lecture summary. It will be saved directly to the database and re-indexed.
-3. Exam Drill (`grill_me` and `evaluate_student_answer`):
-   - If the student types `/grill me` or asks for practice questions, use `grill_me` to challenge them on real course concepts.
-   - When the student replies with their answer, use `evaluate_student_answer` to grade them accurately out of 10 points.
+{caps}
 
 {notes_ctx}
 COMMUNICATION STYLE:
@@ -359,7 +380,16 @@ COMMUNICATION STYLE:
 - Format responses with GitHub Markdown, code blocks with syntax highlighting, bullet points, and clear bold headings.
 - Never invent facts; consult the lecture materials when uncertain."""
         else:
-            return f"""You are the Master Course AI Tutor and Examiner for the entire academic module:
+            admin_caps = """3. Edit Any Lecture Summary (`edit_lecture_summary`):
+   - You can update the summary of any lecture in this subject when requested.
+4. Subject-Wide Exam Drill (`grill_me` & `evaluate_student_answer`):
+   - Test on individual lectures or holistic course themes when requested."""
+            student_caps = """3. Course Consultation:
+   - Answer student questions, explain cross-lecture themes, and guide their revision.
+   - You cannot edit canonical summaries or execute exam drills."""
+            caps = admin_caps if user_role == "admin" else student_caps
+
+            return f"""You are the Master Course AI Tutor for the academic module:
 "{subject_name}".
 {economy_directive}
 YOUR CAPABILITIES & TOOLS:
@@ -368,14 +398,12 @@ YOUR CAPABILITIES & TOOLS:
    - Search across lectures to answer overarching questions, track topic progression, or locate specific concepts.
 2. Lecture Catalog (`list_subject_lectures` & `get_lecture_details`):
    - List lectures and inspect individual lecture summaries, dates, and materials.
-3. Edit Any Lecture Summary (`edit_lecture_summary`):
-   - You can update the summary of any lecture in this subject when requested.
-4. Subject-Wide Exam Drill (`grill_me` & `evaluate_student_answer`):
-   - Test the student on individual lectures or holistic course themes when they type `/grill me`.
+{caps}
 
 COMMUNICATION STYLE:
 - Clear, academic, structured, and exam-oriented.
 - Highlight connections between different lectures in the course."""
+
 
     @classmethod
     def load_thread_history(cls, db: Session, thread_id: str) -> list[BaseMessage]:
@@ -498,6 +526,8 @@ COMMUNICATION STYLE:
 
         graph = workflow.compile()
 
+        user_role = getattr(user, "role", "student")
+
         # Build message history for prompt
         system_prompt = cls.build_system_prompt(
             scope=scope,
@@ -505,14 +535,19 @@ COMMUNICATION STYLE:
             subject_name=subject_name,
             student_notes=student_notes,
             token_saver=token_saver,
+            user_role=user_role,
         )
 
         past_messages = cls.load_thread_history(db, effective_thread_id)
 
-        # Handle explicit /grill me shortcut
+        # Handle explicit /grill me shortcut (Admin only)
         augmented_input = clean_msg
         if clean_msg.lower().startswith("/grill") or clean_msg.lower() == "/grill me":
-            augmented_input = "Please grill me on this material by generating a challenging exam question using the grill_me tool!"
+            if user_role == "admin":
+                augmented_input = "Please grill me on this material by generating a challenging exam question using the grill_me tool!"
+            else:
+                augmented_input = "Please explain the key concepts of this material clearly and concisely."
+
 
         # Reduce input token window in token saver mode (3 turns instead of 10)
         history_window = 3 if token_saver else 10
