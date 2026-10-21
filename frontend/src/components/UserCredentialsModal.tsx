@@ -27,6 +27,7 @@ import type { UserProfile } from "../types/auth";
 import type { AutomationProject } from "../types/jiraAutomation";
 import { JiraProjectSettings } from "../pages/jiraPage/JiraProjectSettings";
 import { JiraAgentGuideView } from "../pages/jiraPage/JiraAgentGuideModal";
+import { useAppStore } from "../stores/useAppStore";
 
 export type UserCredentialsModalTab =
   | "profile"
@@ -74,16 +75,37 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
     refreshAllSources,
   } = useCalendarViewModel();
 
-  // Normalize initialTab
+  const { activeApp } = useAppStore();
+  const isJiraContext = activeApp === "jira_automation" || Boolean(project);
+  const isAdmin = currentUser?.role === "admin";
+
+  // Normalize initialTab based on context and role
   const normalizeTab = (tab?: UserCredentialsModalTab): UserCredentialsModalTab => {
-    if (!tab) return project ? "jira" : "profile";
-    if (tab === "credentials") return "ai_models";
-    if (tab === "google_workspace") return "timetable";
-    if (tab === "developer_tools" || tab === "project") return "jira";
-    return tab;
+    let t = tab;
+    if (t === "credentials") t = "ai_models";
+    if (t === "google_workspace") t = "timetable";
+    if (t === "developer_tools" || t === "project") t = "jira";
+
+    if (isJiraContext) {
+      if (!t || t === "timetable") return project ? "jira" : "profile";
+      if (t === "admin_users" && !isAdmin) return "profile";
+      return t;
+    } else {
+      // Study Hub (Meeting App) context
+      if (!t || t === "jira" || t === "ai_models" || t === "agent_guide") return "profile";
+      if (t === "timetable" && !isAdmin) return "profile";
+      if (t === "admin_users" && !isAdmin) return "profile";
+      return t;
+    }
   };
 
   const [activeTab, setActiveTab] = useState<UserCredentialsModalTab>(normalizeTab(initialTab));
+
+  useEffect(() => {
+    if (isOpen) {
+      setActiveTab(normalizeTab(initialTab));
+    }
+  }, [isOpen, initialTab, isJiraContext, isAdmin]);
 
   // Profile Form State
   const [displayName, setDisplayName] = useState("");
@@ -404,8 +426,8 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-white flex items-center space-x-2">
-                <span>Account & Credentials Hub</span>
-                {currentActiveProject && (
+                <span>{isJiraContext ? "Jira & AI Credentials Hub" : "Study Hub Account"}</span>
+                {isJiraContext && currentActiveProject && (
                   <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-950/80 border border-indigo-500/40 text-indigo-300 font-normal">
                     {currentActiveProject.name}
                   </span>
@@ -427,7 +449,7 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
 
         {/* Tab switcher */}
         <div className="px-6 pt-3 border-b border-slate-800 flex space-x-2 bg-slate-900/30 text-xs overflow-x-auto flex-shrink-0">
-          {/* Tab 1: Profile */}
+          {/* Tab 1: Profile (always visible) */}
           <button
             type="button"
             onClick={() => setActiveTab("profile")}
@@ -441,50 +463,56 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
             <span>Profile</span>
           </button>
 
-          {/* Tab 2: AI & Models BYOK */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("ai_models")}
-            className={`pb-2.5 px-3 font-semibold transition border-b-2 cursor-pointer flex items-center space-x-1.5 whitespace-nowrap ${
-              activeTab === "ai_models"
-                ? "border-indigo-500 text-indigo-400"
-                : "border-transparent text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span>AI Models & BYOK</span>
-          </button>
+          {/* Tab 2: Jira Integration (Jira context only) */}
+          {isJiraContext && (
+            <button
+              type="button"
+              onClick={() => setActiveTab("jira")}
+              className={`pb-2.5 px-3 font-semibold transition border-b-2 cursor-pointer flex items-center space-x-1.5 whitespace-nowrap ${
+                activeTab === "jira" || activeTab === "project"
+                  ? "border-indigo-500 text-indigo-400"
+                  : "border-transparent text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <Plug className="w-3.5 h-3.5 text-blue-400" />
+              <span>Jira Integration</span>
+            </button>
+          )}
 
-          {/* Tab 3: Jira Integration */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("jira")}
-            className={`pb-2.5 px-3 font-semibold transition border-b-2 cursor-pointer flex items-center space-x-1.5 whitespace-nowrap ${
-              activeTab === "jira" || activeTab === "project"
-                ? "border-indigo-500 text-indigo-400"
-                : "border-transparent text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <Plug className="w-3.5 h-3.5 text-blue-400" />
-            <span>Jira Integration</span>
-          </button>
+          {/* Tab 3: AI & Models BYOK (Jira context only) */}
+          {isJiraContext && (
+            <button
+              type="button"
+              onClick={() => setActiveTab("ai_models")}
+              className={`pb-2.5 px-3 font-semibold transition border-b-2 cursor-pointer flex items-center space-x-1.5 whitespace-nowrap ${
+                activeTab === "ai_models"
+                  ? "border-indigo-500 text-indigo-400"
+                  : "border-transparent text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>AI Models & BYOK</span>
+            </button>
+          )}
 
-          {/* Tab 4: Timetable / Rapla */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("timetable")}
-            className={`pb-2.5 px-3 font-semibold transition border-b-2 cursor-pointer flex items-center space-x-1.5 whitespace-nowrap ${
-              activeTab === "timetable"
-                ? "border-indigo-500 text-indigo-400"
-                : "border-transparent text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <Calendar className="w-3.5 h-3.5" />
-            <span>Timetable / Rapla</span>
-          </button>
+          {/* Tab 4: Timetable / Rapla (Study Hub context only, Admin only) */}
+          {!isJiraContext && isAdmin && (
+            <button
+              type="button"
+              onClick={() => setActiveTab("timetable")}
+              className={`pb-2.5 px-3 font-semibold transition border-b-2 cursor-pointer flex items-center space-x-1.5 whitespace-nowrap ${
+                activeTab === "timetable"
+                  ? "border-indigo-500 text-indigo-400"
+                  : "border-transparent text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              <span>Timetable / Rapla</span>
+            </button>
+          )}
 
-          {/* Agent Guide Tab */}
-          {currentActiveProject && (
+          {/* Agent Guide Tab (Jira context only, when project exists) */}
+          {isJiraContext && currentActiveProject && (
             <button
               type="button"
               onClick={() => setActiveTab("agent_guide")}
@@ -499,8 +527,8 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
             </button>
           )}
 
-          {/* Admin User Management */}
-          {currentUser?.role === "admin" && (
+          {/* Admin User Management (Admin only) */}
+          {isAdmin && (
             <button
               type="button"
               onClick={() => setActiveTab("admin_users")}
@@ -587,7 +615,7 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
           )}
 
           {/* TAB 2: AI Models & BYOK */}
-          {activeTab === "ai_models" && (
+          {activeTab === "ai_models" && isJiraContext && (
             <div className="space-y-6 w-full">
               <form onSubmit={handleSaveAIConfig} className="space-y-6">
                 {/* Engine Selector */}
@@ -788,7 +816,7 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
           )}
 
           {/* TAB 3: Jira Integration */}
-          {(activeTab === "jira" || activeTab === "project" || activeTab === "developer_tools") && (
+          {(activeTab === "jira" || activeTab === "project" || activeTab === "developer_tools") && isJiraContext && (
             <div className="space-y-6 w-full">
               {/* Jira Cloud Workspace & Projects Configuration */}
               <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-4">
@@ -918,7 +946,7 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
           )}
 
           {/* TAB 4: Timetable / Rapla Sync */}
-          {activeTab === "timetable" && (
+          {activeTab === "timetable" && !isJiraContext && isAdmin && (
             <div className="space-y-6 w-full">
               {/* DHBW Timetable / Rapla Sync Card */}
               <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-4">
