@@ -751,85 +751,8 @@ async def list_project_members(
     db: Session = Depends(get_db),
     current_user: UserDB = Depends(get_current_user),
 ):
-    """List all members assigned to this project, auto-syncing from Jira API if available."""
-    proj = _verify_project_access(db, project_id, current_user)
-    if proj and proj.jira_project_key:
-        jira = get_jira_client_for_project(proj)
-        if jira:
-            try:
-                discovered = await jira.discover_members(proj.jira_project_key)
-                for d in discovered:
-                    acct_id = d.get("account_id")
-                    disp_name = (d.get("display_name") or "Jira User").strip()
-                    email = (d.get("email") or "").strip()
-                    if not acct_id:
-                        continue
-
-                    user = (
-                        db.query(UserDB)
-                        .join(UserCredentialsDB, UserDB.id == UserCredentialsDB.user_id, isouter=True)
-                        .filter(
-                            (UserCredentialsDB.jira_account_id == acct_id)
-                            | ((UserDB.email == email) if email else False)
-                            | (UserDB.display_name.ilike(disp_name))
-                        )
-                        .first()
-                    )
-
-                    clean_name = re.sub(r"[^a-zA-Z0-9_]", "_", disp_name.lower())[:30].strip("_")
-                    if not clean_name:
-                        clean_name = "jira_user"
-                    user_email = email if email else f"{clean_name}_{acct_id[-6:]}@jira.local"
-
-                    if not user:
-                        username = f"{clean_name}_{acct_id[-6:]}"
-                        suffix = 1
-                        while db.query(UserDB).filter(UserDB.username == username).first():
-                            username = f"{clean_name}_{acct_id[-4:]}_{suffix}"
-                            suffix += 1
-
-                        user = UserDB(
-                            id=str(uuid.uuid4()),
-                            username=username,
-                            display_name=disp_name,
-                            email=user_email,
-                            role="student",
-                            password_hash="jira_synced_user",
-                            is_active=True,
-                        )
-                        db.add(user)
-                        db.flush()
-
-                    creds = db.query(UserCredentialsDB).filter(UserCredentialsDB.user_id == user.id).first()
-                    if not creds:
-                        creds = UserCredentialsDB(
-                            id=str(uuid.uuid4()),
-                            user_id=user.id,
-                            jira_account_id=acct_id,
-                        )
-                        db.add(creds)
-                    elif not creds.jira_account_id:
-                        creds.jira_account_id = acct_id
-
-                    pm = (
-                        db.query(ProjectMemberDB)
-                        .filter(ProjectMemberDB.project_id == project_id, ProjectMemberDB.user_id == user.id)
-                        .first()
-                    )
-                    if not pm:
-                        pm = ProjectMemberDB(
-                            id=str(uuid.uuid4()),
-                            project_id=project_id,
-                            user_id=user.id,
-                            role_in_project="developer",
-                        )
-                        db.add(pm)
-
-                db.commit()
-            except Exception as e:
-                logger.warning(f"Auto-sync members from Jira failed: {e}")
-                db.rollback()
-
+    """List all members assigned to this project."""
+    _verify_project_access(db, project_id, current_user)
     members = db.query(ProjectMemberDB).filter(ProjectMemberDB.project_id == project_id).all()
     # Sort with Atai first, then alphabetical by display name
     members.sort(
