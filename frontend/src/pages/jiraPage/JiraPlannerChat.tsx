@@ -40,7 +40,7 @@ export const JiraPlannerChat: React.FC<JiraPlannerChatProps> = ({
   onPlanExecuted,
   onOpenProfile,
 }) => {
-  const { credentials } = useAuthViewModel();
+  const { credentials, isStudent } = useAuthViewModel();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
@@ -283,8 +283,8 @@ export const JiraPlannerChat: React.FC<JiraPlannerChatProps> = ({
         </div>
       </div>
 
-      {/* Gemini Key Notice Banner if not configured */}
-      {!credentials?.has_gemini_api_key && (
+      {/* Gemini Key Notice Banner - only for regular students requiring personal BYOK */}
+      {isStudent && !credentials?.has_gemini_api_key && (
         <div className="p-3 bg-amber-950/40 border-b border-amber-500/30 flex items-center justify-between text-xs text-amber-300">
           <div className="flex items-center space-x-2">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />

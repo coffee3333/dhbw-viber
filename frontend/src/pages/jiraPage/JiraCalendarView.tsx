@@ -26,6 +26,7 @@ import { jiraAutomationApi } from "../../api/jiraAutomationApi";
 import { showToast } from "../../utils/toast";
 import { JiraPlannerChat } from "./JiraPlannerChat";
 import { UserCredentialsModal, type UserCredentialsModalTab } from "../../components/UserCredentialsModal";
+import { useAuthViewModel } from "../../viewmodels/useAuthViewModel";
 import type {
   AutomationProject,
   AutomationSprint,
@@ -192,6 +193,7 @@ export const JiraCalendarView: React.FC<JiraCalendarViewProps> = ({
   onRefresh,
   onSelectSprint,
 }) => {
+  const { isAdmin } = useAuthViewModel();
   const [currentDate, setCurrentDate] = useState(() => new Date());
 
   const [selectedSprintFilter, setSelectedSprintFilter] = useState<string>("all");
@@ -297,18 +299,25 @@ export const JiraCalendarView: React.FC<JiraCalendarViewProps> = ({
   }, [sprints, selectedBoardId]);
 
 
-  // Sprints banner display limiter
+  // Sprints banner display limiter: show only 2 sprints by default, hide others
   const [showAllSprintsBanner, setShowAllSprintsBanner] = useState(false);
   const displaySprints = useMemo(() => {
-    if (showAllSprintsBanner || boardSprints.length <= 5) {
+    if (isAdmin && showAllSprintsBanner) {
       return boardSprints;
     }
-    const activeAndFuture = boardSprints.filter((s) => !s.closed);
-    const closed = boardSprints.filter((s) => s.closed);
-    const recentClosed = closed.slice(-Math.max(1, 5 - activeAndFuture.length));
-    const combined = [...recentClosed, ...activeAndFuture];
-    return boardSprints.filter((s) => combined.some((c) => c.id === s.id));
-  }, [boardSprints, showAllSprintsBanner]);
+    if (boardSprints.length <= 2) {
+      return boardSprints;
+    }
+    const activeIdx = boardSprints.findIndex((s) => s.started && !s.closed);
+    if (activeIdx !== -1) {
+      return boardSprints.slice(activeIdx, activeIdx + 2);
+    }
+    const upcomingIdx = boardSprints.findIndex((s) => !s.closed);
+    if (upcomingIdx !== -1) {
+      return boardSprints.slice(upcomingIdx, upcomingIdx + 2);
+    }
+    return boardSprints.slice(0, 2);
+  }, [boardSprints, showAllSprintsBanner, isAdmin]);
 
   // Overflow Menu & Settings Hub state
   const [isOverflowOpen, setIsOverflowOpen] = useState(false);
@@ -966,7 +975,7 @@ export const JiraCalendarView: React.FC<JiraCalendarViewProps> = ({
             <ChevronDown className="w-3.5 h-3.5 text-indigo-400 absolute right-2 pointer-events-none" />
           </div>
 
-          {onOpenNewProject && (
+          {isAdmin && onOpenNewProject && (
             <button
               onClick={onOpenNewProject}
               className="p-1.5 rounded-xl bg-slate-900 border border-slate-700/80 hover:bg-slate-800 text-slate-300 hover:text-white transition cursor-pointer flex-shrink-0"
@@ -1026,65 +1035,69 @@ export const JiraCalendarView: React.FC<JiraCalendarViewProps> = ({
             ))}
           </select>
 
-          <button
-            onClick={() => openScheduleSprint()}
-            className="px-3 py-1.5 rounded-xl border border-slate-700/80 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer shadow-sm"
-          >
-            <Calendar className="w-3.5 h-3.5 text-cyan-400" />
-            <span>+ New Sprint</span>
-          </button>
-
-          {/* Overflow Menu: Sync, Run Now, Settings */}
-          <div className="relative" ref={overflowRef}>
+          {isAdmin && (
             <button
-              onClick={() => setIsOverflowOpen(!isOverflowOpen)}
-              className="p-1.5 rounded-xl bg-slate-900 border border-slate-700/80 hover:bg-slate-800 text-slate-300 hover:text-white transition cursor-pointer"
-              title="More Actions"
+              onClick={() => openScheduleSprint()}
+              className="px-3 py-1.5 rounded-xl border border-slate-700/80 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer shadow-sm"
             >
-              <MoreHorizontal className="w-4 h-4" />
+              <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+              <span>+ New Sprint</span>
             </button>
+          )}
 
-            {isOverflowOpen && (
-              <div className="absolute right-0 mt-2 w-52 bg-[#0f172a] border border-slate-800 rounded-2xl shadow-2xl p-1.5 z-50 text-xs space-y-0.5">
-                <button
-                  onClick={async () => {
-                    setIsOverflowOpen(false);
-                    await handleSyncFromJira();
-                  }}
-                  disabled={isSyncingFromJira}
-                  className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2 text-slate-200 hover:bg-slate-800 hover:text-white transition cursor-pointer disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isSyncingFromJira ? "animate-spin" : ""}`} />
-                  <span>{isSyncingFromJira ? "Syncing..." : "Sync from Jira"}</span>
-                </button>
+          {/* Overflow Menu: Sync, Run Now, Settings (Admin only) */}
+          {isAdmin && (
+            <div className="relative" ref={overflowRef}>
+              <button
+                onClick={() => setIsOverflowOpen(!isOverflowOpen)}
+                className="p-1.5 rounded-xl bg-slate-900 border border-slate-700/80 hover:bg-slate-800 text-slate-300 hover:text-white transition cursor-pointer"
+                title="More Actions"
+              >
+                <MoreHorizontal className="w-4 h-4" />
+              </button>
 
-                <button
-                  onClick={async () => {
-                    setIsOverflowOpen(false);
-                    await handleRunNow();
-                  }}
-                  disabled={isRunningNow}
-                  className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2 text-slate-200 hover:bg-slate-800 hover:text-white transition cursor-pointer disabled:opacity-50"
-                >
-                  <Play className={`w-3.5 h-3.5 text-amber-400 ${isRunningNow ? "animate-spin" : ""}`} />
-                  <span>{isRunningNow ? "Processing..." : "Run Automation Now"}</span>
-                </button>
+              {isOverflowOpen && (
+                <div className="absolute right-0 mt-2 w-52 bg-[#0f172a] border border-slate-800 rounded-2xl shadow-2xl p-1.5 z-50 text-xs space-y-0.5">
+                  <button
+                    onClick={async () => {
+                      setIsOverflowOpen(false);
+                      await handleSyncFromJira();
+                    }}
+                    disabled={isSyncingFromJira}
+                    className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2 text-slate-200 hover:bg-slate-800 hover:text-white transition cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isSyncingFromJira ? "animate-spin" : ""}`} />
+                    <span>{isSyncingFromJira ? "Syncing..." : "Sync from Jira"}</span>
+                  </button>
 
-                <div className="border-t border-slate-800 my-1" />
+                  <button
+                    onClick={async () => {
+                      setIsOverflowOpen(false);
+                      await handleRunNow();
+                    }}
+                    disabled={isRunningNow}
+                    className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2 text-slate-200 hover:bg-slate-800 hover:text-white transition cursor-pointer disabled:opacity-50"
+                  >
+                    <Play className={`w-3.5 h-3.5 text-amber-400 ${isRunningNow ? "animate-spin" : ""}`} />
+                    <span>{isRunningNow ? "Processing..." : "Run Automation Now"}</span>
+                  </button>
 
-                <button
-                  onClick={() => {
-                    setIsOverflowOpen(false);
-                    openSettingsHub("project");
-                  }}
-                  className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2 text-slate-200 hover:bg-slate-800 hover:text-white transition cursor-pointer"
-                >
-                  <Settings className="w-3.5 h-3.5 text-purple-400" />
-                  <span>Settings & Integrations</span>
-                </button>
-              </div>
-            )}
-          </div>
+                  <div className="border-t border-slate-800 my-1" />
+
+                  <button
+                    onClick={() => {
+                      setIsOverflowOpen(false);
+                      openSettingsHub("project");
+                    }}
+                    className="w-full px-3 py-2 rounded-xl text-left flex items-center space-x-2 text-slate-200 hover:bg-slate-800 hover:text-white transition cursor-pointer"
+                  >
+                    <Settings className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Settings & Integrations</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -1092,7 +1105,7 @@ export const JiraCalendarView: React.FC<JiraCalendarViewProps> = ({
       {boardSprints.length > 0 && (
         <div className="w-full min-w-0 max-w-full px-4 sm:px-6 py-2 border-b border-slate-800/80 bg-slate-900/30 flex flex-wrap items-center gap-2 flex-shrink-0 text-xs max-h-48 overflow-y-auto">
           <span className="text-slate-500 font-bold uppercase text-[10px] tracking-wider whitespace-nowrap mr-1">
-            Sprints ({boardSprints.length}):
+            Sprints ({isAdmin ? boardSprints.length : Math.min(2, boardSprints.length)}):
           </span>
           {displaySprints.map((s) => (
             <div
@@ -1123,7 +1136,7 @@ export const JiraCalendarView: React.FC<JiraCalendarViewProps> = ({
               </span>
             </div>
           ))}
-          {boardSprints.length > 5 && (
+          {isAdmin && boardSprints.length > 2 && (
             <button
               onClick={() => setShowAllSprintsBanner(!showAllSprintsBanner)}
               className="px-2.5 py-1 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition cursor-pointer flex items-center space-x-1 shadow-sm whitespace-nowrap flex-shrink-0"
@@ -1224,8 +1237,14 @@ export const JiraCalendarView: React.FC<JiraCalendarViewProps> = ({
                     return (
                       <div
                         key={dayIdx}
-                        onClick={() => openCreateTaskDialog(cell.date)}
-                        className={`group p-2 border-r border-slate-800/60 last:border-r-0 transition flex flex-col justify-between hover:bg-slate-900/50 cursor-pointer ${
+                        onClick={() => {
+                          if (isAdmin) {
+                            openCreateTaskDialog(cell.date);
+                          }
+                        }}
+                        className={`group p-2 border-r border-slate-800/60 last:border-r-0 transition flex flex-col justify-between ${
+                          isAdmin ? "hover:bg-slate-900/50 cursor-pointer" : ""
+                        } ${
                           cell.isCurrentMonth ? "bg-[#0b0f19]" : "bg-slate-950/40 opacity-40"
                         } ${today ? "ring-1 ring-inset ring-indigo-500/50 bg-indigo-950/10" : ""}`}
                       >
@@ -1365,7 +1384,7 @@ export const JiraCalendarView: React.FC<JiraCalendarViewProps> = ({
             <div className="flex items-center justify-between pb-2 border-b border-[#2a2d3a]">
               <div className="flex items-center space-x-2">
                 <h3 className="text-sm font-bold text-white">
-                  {taskDialogMode === "edit" ? "Edit Task" : "New Task"}
+                  {!isAdmin ? "Task Details" : taskDialogMode === "edit" ? "Edit Task" : "New Task"}
                 </h3>
                 {taskForm.jiraIssueKey && (
                   <span className="text-xs font-mono font-bold text-cyan-400 bg-cyan-950/60 border border-cyan-500/40 px-2 py-0.5 rounded-full">
@@ -1382,6 +1401,7 @@ export const JiraCalendarView: React.FC<JiraCalendarViewProps> = ({
               </button>
             </div>
 
+            <fieldset disabled={!isAdmin} className="space-y-4">
             {/* Sprint selection */}
             <div className="space-y-1">
               <label className="text-xs font-semibold text-slate-300">Sprint *</label>
@@ -1684,10 +1704,12 @@ export const JiraCalendarView: React.FC<JiraCalendarViewProps> = ({
               )}
             </div>
 
+            </fieldset>
+
             {/* Dialog Footer Actions */}
             <div className="flex items-center justify-between pt-2 border-t border-[#2a2d3a]">
               <div>
-                {taskDialogMode === "edit" && (
+                {isAdmin && taskDialogMode === "edit" && (
                   <button
                     type="button"
                     onClick={handleDeleteTask}
@@ -1700,7 +1722,7 @@ export const JiraCalendarView: React.FC<JiraCalendarViewProps> = ({
               </div>
 
               <div className="flex items-center space-x-2">
-                {taskDialogMode === "edit" && !taskForm.created && (
+                {isAdmin && taskDialogMode === "edit" && !taskForm.created && (
                   <button
                     type="button"
                     onClick={handlePushTaskToJira}
@@ -1716,16 +1738,18 @@ export const JiraCalendarView: React.FC<JiraCalendarViewProps> = ({
                   onClick={() => setIsTaskDialogOpen(false)}
                   className="px-3.5 py-1.5 rounded-xl text-xs text-slate-400 hover:text-white"
                 >
-                  Cancel
+                  {isAdmin ? "Cancel" : "Close"}
                 </button>
 
-                <button
-                  type="submit"
-                  disabled={isSubmittingTask}
-                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-md shadow-indigo-600/30 disabled:opacity-50 cursor-pointer flex items-center space-x-1.5"
-                >
-                  {isSubmittingTask ? "Saving..." : taskDialogMode === "edit" ? "Save Changes" : "Create Task"}
-                </button>
+                {isAdmin && (
+                  <button
+                    type="submit"
+                    disabled={isSubmittingTask}
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-md shadow-indigo-600/30 disabled:opacity-50 cursor-pointer flex items-center space-x-1.5"
+                  >
+                    {isSubmittingTask ? "Saving..." : taskDialogMode === "edit" ? "Save Changes" : "Create Task"}
+                  </button>
+                )}
               </div>
             </div>
           </form>
