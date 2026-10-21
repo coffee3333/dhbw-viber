@@ -79,6 +79,7 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
   const isJiraContext = activeApp === "jira_automation" || Boolean(project);
   const isAdmin = currentUser?.role === "admin";
   const isProStudent = currentUser?.role === "pro_student";
+  const isStudent = currentUser?.role === "student";
 
   // Normalize initialTab based on context and role
   const normalizeTab = (tab?: UserCredentialsModalTab): UserCredentialsModalTab => {
@@ -90,7 +91,7 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
     if (isJiraContext) {
       if (!t || t === "timetable") return project ? "jira" : "profile";
       if (t === "admin_users" && !isAdmin) return "profile";
-      if (t === "ai_models" && isProStudent) return "profile";
+      if (t === "ai_models" && !isStudent) return "profile";
       return t;
     } else {
       // Study Hub (Meeting App) context
@@ -481,8 +482,8 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
             </button>
           )}
 
-          {/* Tab 3: AI & Models BYOK (Jira context, Admin or regular student requiring BYOK) */}
-          {isJiraContext && !isProStudent && (
+          {/* Tab 3: AI & Models BYOK (Jira context, ONLY regular students requiring BYOK) */}
+          {isJiraContext && isStudent && (
             <button
               type="button"
               onClick={() => setActiveTab("ai_models")}
