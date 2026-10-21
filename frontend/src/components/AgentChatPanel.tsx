@@ -467,14 +467,6 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({
 
       {/* 5. Message Input Bar */}
       <div className="p-3 border-t border-slate-800 bg-slate-950/90 space-y-1.5">
-        {tokenSaver && (
-          <div className="flex items-center justify-between px-1 text-[10px] text-emerald-400 font-mono">
-            <span className="flex items-center space-x-1">
-              <Zap className="w-2.5 h-2.5 fill-emerald-400" />
-              <span>Token Saver Active — Responses are concise & token-optimized</span>
-            </span>
-          </div>
-        )}
         <form
           onSubmit={(e) => {
             e.preventDefault();
