@@ -59,6 +59,31 @@ export const App: React.FC = () => {
     selectSubject(subjectId);
   };
 
+  // Secure Auth Guard: If authentication is required and user is not authenticated,
+  // do NOT render any underlying components or fetch protected workspace data.
+  if (authRequired && !isAuthenticated) {
+    return (
+      <ErrorBoundary>
+        <div className="bg-[#0b0f19] text-slate-100 min-h-screen flex antialiased selection:bg-indigo-500 selection:text-white overflow-hidden">
+          <Toaster
+            position="top-right"
+            theme="dark"
+            richColors
+            closeButton
+            toastOptions={{
+              style: {
+                background: "#0f172a",
+                borderColor: "rgba(51, 65, 85, 0.8)",
+                color: "#f8fafc",
+              },
+            }}
+          />
+          <AuthLockscreen />
+        </div>
+      </ErrorBoundary>
+    );
+  }
+
   return (
     <ErrorBoundary>
       <div className="bg-[#0b0f19] text-slate-100 min-h-screen flex antialiased selection:bg-indigo-500 selection:text-white overflow-hidden">
@@ -127,9 +152,6 @@ export const App: React.FC = () => {
           isOpen={isTasksModalOpen}
           onClose={() => setTasksModalOpen(false)}
         />
-
-        {/* Multi-User & Master Passphrase Lockscreen (Auth Guard) */}
-        <AuthLockscreen />
       </div>
     </ErrorBoundary>
   );

@@ -27,12 +27,22 @@ interface AuthState {
   logout: () => void;
 }
 
+const getInitialToken = (): string | null => {
+  try {
+    return typeof window !== "undefined" ? localStorage.getItem("meeting_auth_token") : null;
+  } catch {
+    return null;
+  }
+};
+
+const initialToken = getInitialToken();
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       authRequired: true,
-      isAuthenticated: false,
-      token: null,
+      isAuthenticated: Boolean(initialToken),
+      token: initialToken,
       currentUser: null,
       credentials: null,
       savedPassphrase: "",
@@ -60,7 +70,12 @@ export const useAuthStore = create<AuthState>()(
       setError: (error) => set({ error }),
       setLoading: (isLoading) => set({ isLoading }),
       logout: () => {
-        localStorage.removeItem("meeting_auth_token");
+        try {
+          localStorage.removeItem("meeting_auth_token");
+          localStorage.removeItem("meeting_agent_auth_storage");
+        } catch {
+          // ignore
+        }
         set({
           isAuthenticated: false,
           token: null,
@@ -76,6 +91,7 @@ export const useAuthStore = create<AuthState>()(
       partialize: (state) => ({
         token: state.token,
         currentUser: state.currentUser,
+        isAuthenticated: state.isAuthenticated,
       }),
     }
   )
