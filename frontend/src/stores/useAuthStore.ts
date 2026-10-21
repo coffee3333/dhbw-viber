@@ -8,7 +8,6 @@ interface AuthState {
   token: string | null;
   currentUser: UserProfile | null;
   credentials: UserCredentials | null;
-  savedPassphrase: string;
   error: string | null;
   isLoading: boolean;
 
@@ -21,7 +20,6 @@ interface AuthState {
   ) => void;
   setCurrentUser: (user: UserProfile | null) => void;
   setCredentials: (creds: UserCredentials | null) => void;
-  setSavedPassphrase: (pass: string) => void;
   setError: (err: string | null) => void;
   setLoading: (loading: boolean) => void;
   logout: () => void;
@@ -45,12 +43,11 @@ export const useAuthStore = create<AuthState>()(
       token: initialToken,
       currentUser: null,
       credentials: null,
-      savedPassphrase: "",
       error: null,
       isLoading: false,
 
       setAuthRequired: (required) => set({ authRequired: required }),
-      setAuthenticated: (authenticated, token, passphrase, user) => {
+      setAuthenticated: (authenticated, token, _passphrase, user) => {
         if (token) {
           localStorage.setItem("meeting_auth_token", token);
         } else if (!authenticated) {
@@ -59,14 +56,12 @@ export const useAuthStore = create<AuthState>()(
         set((state) => ({
           isAuthenticated: authenticated,
           token: token ?? (authenticated ? state.token : null),
-          savedPassphrase: passphrase ?? (authenticated ? state.savedPassphrase : ""),
           currentUser: user !== undefined ? user : (authenticated ? state.currentUser : null),
           error: null,
         }));
       },
       setCurrentUser: (currentUser) => set({ currentUser }),
       setCredentials: (credentials) => set({ credentials }),
-      setSavedPassphrase: (savedPassphrase) => set({ savedPassphrase }),
       setError: (error) => set({ error }),
       setLoading: (isLoading) => set({ isLoading }),
       logout: () => {
@@ -81,7 +76,6 @@ export const useAuthStore = create<AuthState>()(
           token: null,
           currentUser: null,
           credentials: null,
-          savedPassphrase: "",
           error: null,
         });
       },

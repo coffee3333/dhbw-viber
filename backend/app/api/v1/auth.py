@@ -163,42 +163,12 @@ def login(payload: LoginRequest, request: Request, response: Response, db: Sessi
             "message": f"Welcome back, {user.display_name}!"
         }
 
-    # 2. Master Password fallback
-    if settings.app_password and settings.app_password.strip():
-        if not secrets.compare_digest(payload.password.encode("utf-8"), settings.app_password.encode("utf-8")):
-            failed_count = record_failed_attempt(rate_key)
-            remaining = max(0, 5 - failed_count)
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Invalid password. ({remaining} attempts remaining)"
-            )
-
-        reset_failed_attempts(rate_key)
-        admin = db.query(UserDB).filter(UserDB.role == "admin").first()
-        admin_id = admin.id if admin else "admin"
-        admin_username = admin.username if admin else "admin"
-        token = create_access_token({"user_id": admin_id, "username": admin_username, "role": "admin"})
-
-        response.set_cookie(
-            key=settings.session_cookie_name,
-            value=token,
-            max_age=settings.session_expire_days * 86400,
-            httponly=True,
-            samesite="lax",
-            secure=not settings.debug and request.url.scheme == "https",
-            path="/"
-        )
-
-        return {
-            "success": True,
-            "token": token,
-            "user": {"id": admin_id, "username": admin_username, "display_name": "Administrator", "role": "admin"},
-            "message": "Welcome back, Administrator!"
-        }
-
+    # Credentials failed authentication
+    failed_count = record_failed_attempt(rate_key)
+    remaining = max(0, 5 - failed_count)
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Please provide a valid username and password to log in."
+        detail=f"Invalid username or password. ({remaining} attempts remaining)"
     )
 
 

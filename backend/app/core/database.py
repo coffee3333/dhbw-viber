@@ -90,7 +90,7 @@ def init_db() -> None:
         with SessionLocal() as db:
             admin_user = db.query(UserDB).filter(UserDB.role == "admin").first()
             if not admin_user:
-                default_admin_pwd = settings.app_password or "admin123"
+                default_admin_pwd = "admin123"
                 new_admin = UserDB(
                     username="admin",
                     display_name="Administrator",

@@ -48,7 +48,6 @@ class Settings(BaseSettings):
     # Security & Production Settings
     secret_key: str = ""
     encryption_master_key: str | None = None
-    app_password: str | None = None  # Single-user master password (if set, auth is enforced)
     session_cookie_name: str = "meeting_session"
     session_expire_days: int = 14
     allowed_origins: str = "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000,https://dhbw-viber.atai.site"  # Comma-separated list of origins for CORS in production
@@ -116,7 +115,6 @@ def get_settings() -> Settings:
         ("google_client_secret", "GOOGLE_CLIENT_SECRET"),
         ("secret_key", "SECRET_KEY"),
         ("encryption_master_key", "ENCRYPTION_MASTER_KEY"),
-        ("app_password", "APP_PASSWORD"),
     ]:
         val = os.environ.get(env_var)
         if val:

@@ -130,10 +130,6 @@ def get_current_user_optional(request: Request, db: Session = Depends(get_db)) -
             user = db.query(UserDB).filter(UserDB.id == user_id, UserDB.is_active == True).first()
             if user:
                 return user
-            if user_id in ("admin", "master", "default") and settings.app_password:
-                user = db.query(UserDB).filter(UserDB.role == "admin", UserDB.is_active == True).first()
-                if user:
-                    return user
 
     return None
 
