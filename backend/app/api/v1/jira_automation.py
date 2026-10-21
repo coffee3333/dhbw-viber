@@ -332,6 +332,7 @@ def _project_to_response(proj: AutomationProjectDB) -> ProjectResponse:
     has_jira = bool(proj.jira_api_token_encrypted)
     has_tg = bool(proj.telegram_bot_token_encrypted)
     raw_jira = decrypt_secret(proj.jira_api_token_encrypted) if has_jira else None
+    raw_tg = decrypt_secret(proj.telegram_bot_token_encrypted) if has_tg else None
     masked_jira = mask_secret(raw_jira) if raw_jira else None
 
     return ProjectResponse(
@@ -341,7 +342,7 @@ def _project_to_response(proj: AutomationProjectDB) -> ProjectResponse:
         jira_domain=proj.jira_domain,
         jira_email=proj.jira_email,
         jira_api_token_masked=masked_jira,
-        has_jira_token=has_jira,
+        has_jira_token=bool(raw_jira),
         jira_project_key=proj.jira_project_key,
         jira_board_id=proj.jira_board_id,
         source_repo_backend=proj.source_repo_backend,
@@ -349,7 +350,7 @@ def _project_to_response(proj: AutomationProjectDB) -> ProjectResponse:
         target_repo_backend=proj.target_repo_backend,
         target_repo_frontend=proj.target_repo_frontend,
         custom_fields_map=proj.custom_fields_map,
-        has_telegram_token=has_tg,
+        has_telegram_token=bool(raw_tg),
         telegram_channel_chat_id=proj.telegram_channel_chat_id,
         is_active=proj.is_active,
         created_at=_to_utc(proj.created_at),

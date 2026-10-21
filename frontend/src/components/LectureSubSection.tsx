@@ -66,6 +66,12 @@ export const LectureSubSection: React.FC<LectureSubSectionProps> = ({
   const { isAdmin, hasChatAccess } = useAuthViewModel();
 
   const [activeTab, setActiveTab] = useState<"summary" | "recording" | "materials">("summary");
+
+  useEffect(() => {
+    if (!isAdmin && activeTab !== "summary") {
+      setActiveTab("summary");
+    }
+  }, [isAdmin, activeTab]);
   
   // Student Notes
   const [notesText, setNotesText] = useState(lecture.notes || "");
@@ -416,31 +422,48 @@ export const LectureSubSection: React.FC<LectureSubSectionProps> = ({
 
           {/* Action Controls & Status Selector */}
           <div className="flex items-center flex-wrap gap-2.5">
-            {/* Status Dropdown */}
-            <div className="flex items-center space-x-1.5 bg-slate-950 px-2.5 py-1.5 rounded-xl border border-slate-700 text-xs">
-              <span className="text-slate-400 text-[11px] font-medium">Status:</span>
-              <select
-                value={lecture.status}
-                disabled={isUpdatingStatus || !isAdmin}
-                onChange={(e) => handleStatusChange(e.target.value)}
-                className={`bg-transparent font-bold capitalize focus:outline-none ${
-                  !isAdmin ? "cursor-default" : "cursor-pointer"
-                } ${
-                  lecture.status === "completed"
-                    ? "text-emerald-400"
-                    : lecture.status === "canceled"
-                    ? "text-rose-400"
-                    : lecture.status === "postponed"
-                    ? "text-amber-400"
-                    : "text-indigo-400"
-                }`}
-              >
-                <option value="scheduled" className="bg-slate-900 text-white">Scheduled</option>
-                <option value="completed" className="bg-slate-900 text-white">Completed</option>
-                <option value="postponed" className="bg-slate-900 text-white">Postponed</option>
-                <option value="canceled" className="bg-slate-900 text-white">Canceled</option>
-              </select>
-            </div>
+            {/* Status Indicator / Dropdown */}
+            {isAdmin ? (
+              <div className="flex items-center space-x-1.5 bg-slate-950 px-2.5 py-1.5 rounded-xl border border-slate-700 text-xs">
+                <span className="text-slate-400 text-[11px] font-medium">Status:</span>
+                <select
+                  value={lecture.status}
+                  disabled={isUpdatingStatus}
+                  onChange={(e) => handleStatusChange(e.target.value)}
+                  className={`bg-transparent font-bold capitalize focus:outline-none cursor-pointer ${
+                    lecture.status === "completed"
+                      ? "text-emerald-400"
+                      : lecture.status === "canceled"
+                      ? "text-rose-400"
+                      : lecture.status === "postponed"
+                      ? "text-amber-400"
+                      : "text-indigo-400"
+                  }`}
+                >
+                  <option value="scheduled" className="bg-slate-900 text-white">Scheduled</option>
+                  <option value="completed" className="bg-slate-900 text-white">Completed</option>
+                  <option value="postponed" className="bg-slate-900 text-white">Postponed</option>
+                  <option value="canceled" className="bg-slate-900 text-white">Canceled</option>
+                </select>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-1.5 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 text-xs select-none">
+                <span className="text-slate-400 text-[11px] font-medium">Status:</span>
+                <span
+                  className={`font-bold capitalize ${
+                    lecture.status === "completed"
+                      ? "text-emerald-400"
+                      : lecture.status === "canceled"
+                      ? "text-rose-400"
+                      : lecture.status === "postponed"
+                      ? "text-amber-400"
+                      : "text-indigo-400"
+                  }`}
+                >
+                  {lecture.status}
+                </span>
+              </div>
+            )}
 
             {/* Record / Upload Audio (Admin Only) */}
             {isAdmin && (
@@ -479,32 +502,36 @@ export const LectureSubSection: React.FC<LectureSubSectionProps> = ({
           )}
         </button>
 
-        <button
-          onClick={() => setActiveTab("recording")}
-          className={`py-3 px-4 text-xs font-bold border-b-2 flex items-center space-x-2 transition ${
-            activeTab === "recording"
-              ? "border-indigo-500 text-indigo-400"
-              : "border-transparent text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <Volume2 className="w-3.5 h-3.5" />
-          <span>Recording & Transcript</span>
-          {recording && (
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
-          )}
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setActiveTab("recording")}
+            className={`py-3 px-4 text-xs font-bold border-b-2 flex items-center space-x-2 transition ${
+              activeTab === "recording"
+                ? "border-indigo-500 text-indigo-400"
+                : "border-transparent text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Volume2 className="w-3.5 h-3.5" />
+            <span>Recording & Transcript</span>
+            {recording && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            )}
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab("materials")}
-          className={`py-3 px-4 text-xs font-bold border-b-2 flex items-center space-x-2 transition ${
-            activeTab === "materials"
-              ? "border-indigo-500 text-indigo-400"
-              : "border-transparent text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <BookOpen className="w-3.5 h-3.5" />
-          <span>Additional Materials & Notes ({lecture.materials?.length || 0})</span>
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setActiveTab("materials")}
+            className={`py-3 px-4 text-xs font-bold border-b-2 flex items-center space-x-2 transition ${
+              activeTab === "materials"
+                ? "border-indigo-500 text-indigo-400"
+                : "border-transparent text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>Additional Materials & Notes ({lecture.materials?.length || 0})</span>
+          </button>
+        )}
       </div>
 
       {/* 4. Sub-section Body */}
@@ -875,8 +902,8 @@ export const LectureSubSection: React.FC<LectureSubSectionProps> = ({
         </div>
       )}
 
-      {/* TAB 2: RECORDING & TRANSCRIPT */}
-      {activeTab === "recording" && (
+      {/* TAB 2: RECORDING & TRANSCRIPT (Admin Only) */}
+      {activeTab === "recording" && isAdmin && (
         <div className="space-y-6">
           {recording ? (
             <div className="space-y-4">
@@ -950,8 +977,8 @@ export const LectureSubSection: React.FC<LectureSubSectionProps> = ({
         </div>
       )}
 
-      {/* TAB 3: ADDITIONAL MATERIALS & STUDENT NOTES */}
-      {activeTab === "materials" && (
+      {/* TAB 3: ADDITIONAL MATERIALS & STUDENT NOTES (Admin Only) */}
+      {activeTab === "materials" && isAdmin && (
         <div className="space-y-6">
           {/* Section A: Student Notes Editor */}
           <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-3">
