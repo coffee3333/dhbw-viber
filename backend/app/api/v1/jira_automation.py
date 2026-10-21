@@ -2098,11 +2098,12 @@ async def agent_chat(
     creds = current_user.credentials if hasattr(current_user, "credentials") else None
     user_gemini_key = decrypt_secret(creds.gemini_api_key_encrypted) if (creds and creds.gemini_api_key_encrypted) else None
 
-    # In Jira Automation, only Admin can fallback to global server key; students/pro_students must BYOK
-    if not user_gemini_key and current_user.role == "admin":
-        settings = get_settings()
-        if settings.gemini_api_key:
-            user_gemini_key = settings.gemini_api_key
+    # Admin and Pro-Student can fallback to system/server Gemini key; regular students must BYOK
+    if not user_gemini_key and current_user.role in ("admin", "pro_student"):
+        from app.core.ai_credentials import get_system_ai_credentials
+        sys_gemini, _ = get_system_ai_credentials(db=db)
+        if sys_gemini:
+            user_gemini_key = sys_gemini
 
     if not user_gemini_key:
         raise HTTPException(
