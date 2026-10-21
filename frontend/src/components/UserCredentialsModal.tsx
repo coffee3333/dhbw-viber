@@ -78,6 +78,7 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
   const { activeApp } = useAppStore();
   const isJiraContext = activeApp === "jira_automation" || Boolean(project);
   const isAdmin = currentUser?.role === "admin";
+  const isProStudent = currentUser?.role === "pro_student";
 
   // Normalize initialTab based on context and role
   const normalizeTab = (tab?: UserCredentialsModalTab): UserCredentialsModalTab => {
@@ -89,6 +90,7 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
     if (isJiraContext) {
       if (!t || t === "timetable") return project ? "jira" : "profile";
       if (t === "admin_users" && !isAdmin) return "profile";
+      if (t === "ai_models" && isProStudent) return "profile";
       return t;
     } else {
       // Study Hub (Meeting App) context
@@ -479,8 +481,8 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
             </button>
           )}
 
-          {/* Tab 3: AI & Models BYOK (Jira context only) */}
-          {isJiraContext && (
+          {/* Tab 3: AI & Models BYOK (Jira context, Admin or regular student requiring BYOK) */}
+          {isJiraContext && !isProStudent && (
             <button
               type="button"
               onClick={() => setActiveTab("ai_models")}
@@ -564,6 +566,15 @@ export const UserCredentialsModal: React.FC<UserCredentialsModalProps> = ({
                     <p className="text-xs text-slate-400">@{currentUser?.username}</p>
                   </div>
                 </div>
+
+                {isProStudent && (
+                  <div className="flex items-center space-x-3 p-3.5 rounded-xl bg-gradient-to-r from-indigo-950/60 to-purple-950/60 border border-indigo-800/40 text-xs text-indigo-200">
+                    <Sparkles className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                    <div>
+                      <span className="font-semibold text-white">Pro Student Tier:</span> AI capabilities are fully included for your account. You do not need to configure any personal API keys or BYOK.
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
