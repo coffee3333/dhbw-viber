@@ -33,6 +33,29 @@ def validate_jira_domain(domain: str) -> str:
     return clean_domain
 
 
+def format_jira_sprint_name(name: str) -> str:
+    """Format and sanitize sprint name to conform with Jira Cloud limit (< 30 chars)."""
+    clean = (name or "").strip()
+    if len(clean) < 30:
+        return clean
+    if ":" in clean:
+        prefix = clean.split(":", 1)[0].strip()
+        suffix = clean.split(":", 1)[1].strip()
+        if len(prefix) < 30:
+            available = 29 - len(prefix) - 2
+            if available > 3:
+                snippet = suffix[:available].strip()
+                candidate = f"{prefix}: {snippet}".strip()
+                if len(candidate) < 30:
+                    return candidate
+            return prefix[:29]
+    elif " - " in clean:
+        prefix = clean.split(" - ", 1)[0].strip()
+        if len(prefix) < 30:
+            return prefix
+    return clean[:29].strip()
+
+
 class JiraClient:
     """Async Jira REST & Agile API client."""
 
@@ -51,12 +74,13 @@ class JiraClient:
 
     async def create_sprint(self, name: str, start_date: str, end_date: str, board_id: int, activate: bool = False) -> int:
         """Create a sprint in Jira Agile and optionally activate it."""
+        jira_name = format_jira_sprint_name(name)
         async with httpx.AsyncClient(timeout=20.0) as client:
             try:
                 res = await client.post(
                     f"{self.base_url}/agile/1.0/sprint",
                     json={
-                        "name": name,
+                        "name": jira_name,
                         "originBoardId": board_id,
                         "startDate": start_date,
                         "endDate": end_date,
@@ -65,8 +89,24 @@ class JiraClient:
                 )
                 res.raise_for_status()
             except httpx.HTTPStatusError as e:
+                # If name exceeds Jira limit, retry with strict prefix
+                if e.response is not None and "shorter than 30 characters" in e.response.text:
+                    fallback_name = (jira_name.split(":")[0] if ":" in jira_name else jira_name)[:29].strip()
+                    logger.warning(f"Sprint name '{jira_name}' rejected by Jira. Retrying with '{fallback_name}'...")
+                    jira_name = fallback_name
+                    res = await client.post(
+                        f"{self.base_url}/agile/1.0/sprint",
+                        json={
+                            "name": jira_name,
+                            "originBoardId": board_id,
+                            "startDate": start_date,
+                            "endDate": end_date,
+                        },
+                        headers=self.headers,
+                    )
+                    res.raise_for_status()
                 # If board has sprints feature disabled (Team-Managed / Kanban), automatically enable it and retry
-                if e.response is not None and "does not support sprints" in e.response.text:
+                elif e.response is not None and "does not support sprints" in e.response.text:
                     logger.info(f"Board {board_id} has sprints feature disabled in Jira. Auto-enabling jsw.agility.sprints...")
                     try:
                         # Auto-enable backlog feature first (prerequisite for sprints)
@@ -85,7 +125,7 @@ class JiraClient:
                         res = await client.post(
                             f"{self.base_url}/agile/1.0/sprint",
                             json={
-                                "name": name,
+                                "name": jira_name,
                                 "originBoardId": board_id,
                                 "startDate": start_date,
                                 "endDate": end_date,
@@ -105,7 +145,7 @@ class JiraClient:
                     await client.put(
                         f"{self.base_url}/agile/1.0/sprint/{sprint_id}",
                         json={
-                            "name": name,
+                            "name": jira_name,
                             "state": "active",
                             "startDate": start_date,
                             "endDate": end_date,
@@ -128,7 +168,7 @@ class JiraClient:
         """Update sprint dates, name, or state in Jira Agile."""
         payload: dict[str, Any] = {}
         if name:
-            payload["name"] = name
+            payload["name"] = format_jira_sprint_name(name)
         if start_date:
             payload["startDate"] = start_date
         if end_date:

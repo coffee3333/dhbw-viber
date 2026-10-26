@@ -37,6 +37,7 @@ CRITICAL INSTRUCTIONS:
      * Specify the updated "start_date" or "end_date" or "name".
    - When the user asks to create a new sprint:
      * Set "action": "create".
+     * SPRINT NAME LENGTH: Jira Cloud strictly enforces that sprint names MUST be shorter than 30 characters (maximum 29 characters, e.g. "CM Sprint 2: Core" or "CM Sprint 2"). Never produce sprint names >= 30 characters.
    - When the user asks to edit, update, or reschedule an existing task or its events/status moves:
      * You MUST set "action": "update".
      * You MUST set "existing_task_id" to the ID of the existing task from 'Existing Tasks & Scheduled Moves' (and include "jira_issue_key" if known).

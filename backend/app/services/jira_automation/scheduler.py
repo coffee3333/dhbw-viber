@@ -147,7 +147,17 @@ async def execute_sprint_start(
                 sprint.jira_sprint_id = jira_sprint_id
                 sprint.board_id = board_id
             except Exception as se:
-                logger.warning(f"[Scheduler] Could not create sprint in Jira for board {board_id}: {se}")
+                err_detail = getattr(getattr(se, "response", None), "text", str(se))
+                logger.warning(f"[Scheduler] Could not create sprint in Jira for board {board_id}: {err_detail}")
+
+        if jira_sprint_id:
+            pre_existing_keys = [t.jira_issue_key for t in sprint.tasks if t.jira_issue_key]
+            if pre_existing_keys:
+                try:
+                    await jira.add_to_sprint(jira_sprint_id, pre_existing_keys)
+                    logger.info(f"[Scheduler] Added pre-existing tasks to sprint {jira_sprint_id}: {pre_existing_keys}")
+                except Exception as ae:
+                    logger.warning(f"[Scheduler] Could not add pre-existing tasks to sprint {jira_sprint_id}: {ae}")
 
     # 2. Create scheduled initial tasks
     now_dt = _normalize_dt(now)
